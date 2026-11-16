@@ -1,4 +1,4 @@
-# TOEIC 850
+# TOEIC 990
 
 Ứng dụng luyện thi TOEIC chạy trên trình duyệt: từ vựng (1000 từ, chia nhóm, có phiên âm, lặp ngắt quãng, kiểm tra nhóm, tự thêm từ), ngữ pháp Part 5, đọc hiểu Part 6–7, nghe Part 1–4, chép chính tả, thi thử, hướng dẫn chiến lược từng Part và hỏi AI.
 

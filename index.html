@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://qnvxmfnegzupkejrmdkx.supabase.co https://api.anthropic.com; object-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
-<title>TOEIC 850 - Luyện thi cá nhân</title>
+<title>TOEIC 990 - Luyện thi cá nhân</title>
 <style>
 :root{--ink:#141A3C;--indigo:#3340C4;--indigo-d:#242E96;--indigo-l:#E9EBFB;--hi:#FFD23F;--mint:#0FA678;--coral:#E5484D;
   --bg:#F3F5FB;--card:#fff;--mist:#E4E8F5;--text:#141A3C;--muted:#5E6591;
@@ -85,6 +85,7 @@ td{padding:8px 8px 8px 0;border-top:1px solid var(--mist);font-variant-numeric:t
 .ruler .goal{position:absolute;top:-6px;width:4px;height:26px;background:var(--hi);border-radius:2px;box-shadow:0 0 0 3px var(--card)}
 .ruler .goal span,.ruler .now span{position:absolute;bottom:32px;left:50%;transform:translateX(-50%);white-space:nowrap;font-size:13px;font-weight:700;color:var(--ink)}
 .ruler .now{position:absolute;top:-5px;width:24px;height:24px;margin-left:-12px;border-radius:50%;background:var(--card);border:6px solid var(--indigo);opacity:0;animation:pop .3s 1s ease forwards}
+.ruler .goal.end span{left:auto;right:-6px;transform:none}
 .ruler .now span{bottom:30px}
 .ruler .ends{position:absolute;top:22px;left:0;right:0;display:flex;justify-content:space-between;font-size:12px;color:var(--muted)}
 @keyframes grow{to{width:var(--w)}}
@@ -111,10 +112,10 @@ td{padding:8px 8px 8px 0;border-top:1px solid var(--mist);font-variant-numeric:t
 </head>
 <body>
 <div class="shell">
-  <aside id="rail"><div class="logo">TOEIC<b>850</b></div><nav id="nav"></nav></aside>
+  <aside id="rail"><div class="logo">TOEIC<b>990</b></div><nav id="nav"></nav></aside>
   <div class="col">
     <header class="top">
-      <div class="logo">TOEIC<b>850</b></div>
+      <div class="logo">TOEIC<b>990</b></div>
       <span class="sp"></span>
       <span class="chip" id="streak" hidden></span>
       <button id="langbtn" onclick="toggleLang()"></button>
@@ -704,7 +705,7 @@ function practiceWrong(){
    TRẠNG THÁI
    ========================================================= */
 const KEY = 'toeic850-data';
-const DEFAULT = {target:850, quiz:{correct:0,total:0}, reading:{correct:0,total:0}, lq:{correct:0,total:0},
+const DEFAULT = {target:990, quiz:{correct:0,total:0}, reading:{correct:0,total:0}, lq:{correct:0,total:0},
                  listen:{done:0,score:0}, vocab:{}, custom:[], settings:{accent:'US', lock:true, realListen:true}, daily:{d:'', n:0}, streak:{last:'', count:0},
                  history:[], mocks:[], qstats:{}, pack:null};
 const clone = o => JSON.parse(JSON.stringify(o));
@@ -714,7 +715,7 @@ function sanitize(raw){
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return out;
   const num = v => (Number.isFinite(v) && v >= 0) ? Math.min(v, 1e7) : 0;
   const pair = p => ({correct: num(p && p.correct), total: num(p && p.total)});
-  out.target = (Number.isFinite(raw.target) && raw.target >= 10 && raw.target <= 990) ? raw.target : 850;
+  out.target = (Number.isFinite(raw.target) && raw.target >= 10 && raw.target < 990 && raw.target !== 850) ? raw.target : 990;   // 850 là mục tiêu cũ, nay chuyển thành 990
   out.quiz = pair(raw.quiz); out.reading = pair(raw.reading); out.lq = pair(raw.lq);
   out.listen = {done: num(raw.listen && raw.listen.done), score: num(raw.listen && raw.listen.score)};
   const ts = v => (Number.isFinite(v) && v >= 0 && v < 4e12) ? v : 0;   // mốc thời gian (ms)
@@ -801,7 +802,7 @@ function homeView(){
       <p class="muted" style="margin:0">${sub}</p>
       <div class="ruler" role="img" aria-label="Thước điểm từ 0 đến ${MAXS}">
         <div class="fill" style="--w:${nw}%"></div>
-        <div class="goal" style="left:${tw}%"><span>Mục tiêu ${S.target}</span></div>
+        <div class="goal${tw > 90 ? ' end' : ''}" style="left:${tw}%"><span>Mục tiêu ${S.target}</span></div>
         ${last ? `<div class="now" style="left:${nw}%"><span>${last.tot}</span></div>` : ''}
         <div class="ends"><span>10</span><span>${MAXS}</span></div>
       </div>
@@ -1404,7 +1405,7 @@ function checkD(){
 function exportData(){
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([JSON.stringify(S, null, 2)], {type:'application/json'}));
-  a.download = 'toeic850-tien-do.json'; a.click();
+  a.download = 'toeic990-tien-do.json'; a.click();
 }
 function importData(f){
   if (!f) return;
@@ -1598,7 +1599,7 @@ const PACK_TEMPLATE = {
 function downloadTemplate(){
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([JSON.stringify(PACK_TEMPLATE, null, 2)], {type: 'application/json'}));
-  a.download = 'toeic850-pack-mau.json'; a.click();
+  a.download = 'toeic990-pack-mau.json'; a.click();
 }
 async function loadPack(){
   try {
