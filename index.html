@@ -3,6 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://qnvxmfnegzupkejrmdkx.supabase.co https://api.anthropic.com; object-src 'none'; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
 <title>TOEIC 850 - Luyện thi cá nhân</title>
 <style>
 :root{--main:#2563eb;--ok:#16a34a;--bad:#dc2626;--bg:#f1f5f9;--card:#fff;--text:#0f172a;--muted:#64748b}
@@ -321,13 +323,141 @@ const LISTEN_QS = LISTEN_SETS.flatMap(s => s.qs.map(x => ({...x, part:s.part, ct
   ts:s.audio.map(a => a.t).join(' '), noshuf:!!s.noshuf})));
 
 /* =========================================================
+   NGÂN HÀNG CÂU HỎI (Supabase, chỉ đọc)
+   Khóa publishable là khóa công khai; quyền đọc được giới hạn bằng RLS trên Supabase.
+   Nếu không tải được, app dùng câu hỏi có sẵn trong file.
+   ========================================================= */
+const SB_URL = 'https://qnvxmfnegzupkejrmdkx.supabase.co';
+const SB_KEY = 'sb_publishable_u597NLiUtXqCAZ4wbPPQnQ';
+let DB_QS = [];
+let DB_STATUS = 'loading';   // 'loading' | 'ok' | 'offline'
+
+const validRow = r => r && [1,2,3,4,5,6,7].includes(r.part) && typeof r.question === 'string' && r.question.length <= 2000
+  && Array.isArray(r.options) && r.options.length >= 2 && r.options.length <= 4
+  && r.options.every(x => typeof x === 'string') && Number.isInteger(r.answer) && r.answer >= 0 && r.answer < r.options.length;
+
+/* Tách transcript thành các lượt nói để đọc bằng giọng nói */
+function transcriptToAudio(part, text){
+  if (!text) return null;
+  let lines;
+  if (part === 1) lines = String(text).split(/(?=\b[A-D]\.\s)/).map(t => ({t: t.trim()}));
+  else if (part === 3) lines = String(text).split(/(?=\b[MW]:\s)/).map(t => t.trim())
+        .filter(Boolean).map(t => ({t: t.replace(/^[MW]:\s*/, ''), v: /^W:/.test(t)}));
+  else lines = [{t: String(text)}];
+  lines = lines.filter(x => x.t);
+  return lines.length ? lines : null;
+}
+
+function toEngine(r){
+  return {
+    uid: 'db' + r.id, partNo: r.part, part: 'Part ' + r.part,
+    q: r.question, o: r.options, a: r.answer, e: r.explanation || '',
+    ctx: r.passage || null, audio: transcriptToAudio(r.part, r.transcript),
+    ts: r.transcript || '', noshuf: r.part === 1, level: r.level
+  };
+}
+
+async function loadQuestions(){
+  try {
+    const url = SB_URL + '/rest/v1/questions?select=id,part,passage,transcript,question,options,answer,explanation,level&order=id.asc&limit=1000';
+    const res = await fetch(url, {headers: {apikey: SB_KEY}, cache: 'no-store'});
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const rows = await res.json();
+    if (!Array.isArray(rows)) throw new Error('payload');
+    DB_QS = rows.filter(validRow).map(toEngine);
+    DB_STATUS = 'ok';
+  } catch (e) {
+    DB_QS = []; DB_STATUS = 'offline';
+  }
+  if (currentRoute === 'parts') partsView();
+}
+
+/* Mã khóa ổn định cho từng câu, để lưu thống kê */
+const hash = s => { let h = 5381; for (let i = 0; i < s.length; i++) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0; return h.toString(36); };
+const qkey = q => q.uid || 'l' + hash([q.q, q.ctx || '', (q.o || []).join('|'), q.a].join('|'));
+
+/* Toàn bộ câu hỏi của một Part: có sẵn trong file + từ Supabase */
+function poolFor(n){
+  const label = 'Part ' + n;
+  const local = n === 5 ? GRAMMAR : n <= 4 ? LISTEN_QS.filter(q => q.part === label) : READING_QS.filter(q => q.part === label);
+  return [...local, ...DB_QS.filter(q => q.partNo === n)].map(q => ({...q, partNo: n}));
+}
+
+/* Logic ôn tập: câu chưa làm và câu hay sai lên trước; câu đã đúng liên tiếp xuống cuối */
+function prioritise(qs){
+  const score = q => {
+    const s = S.qstats[qkey(q)];
+    if (!s) return 2 + Math.random();
+    if (s.streak >= 2) return Math.random() * 0.5;
+    return 1 + s.wrong * 2 + Math.random();
+  };
+  return qs.map(q => ({q, w: score(q)})).sort((a, b) => b.w - a.w).map(x => x.q);
+}
+
+function recordAnswer(q, ok){
+  const k = q.key || qkey(q);
+  const st = S.qstats[k] || (S.qstats[k] = {seen:0, wrong:0, streak:0, p:q.partNo || 0});
+  st.seen++;
+  if (ok) st.streak++; else { st.wrong++; st.streak = 0; }
+  save();
+}
+
+function partAccuracy(n){
+  let seen = 0, wrong = 0;
+  Object.values(S.qstats).forEach(s => { if (s.p === n) { seen += s.seen; wrong += s.wrong; } });
+  return seen ? Math.round((seen - wrong) / seen * 100) + '% (' + seen + ' lượt)' : 'chưa làm';
+}
+
+function practicePart(id){
+  const p = PARTS.find(x => x.id === id);
+  const n = Number(id.slice(1));
+  const pool = poolFor(n);
+  if (!pool.length) return alert('Chưa có câu hỏi cho ' + p.label + '.');
+  const session = prioritise(pool).slice(0, 20);
+  const statKey = n === 5 ? 'quiz' : n <= 4 ? 'lq' : 'reading';
+  startQuiz(p.label, session, statKey, 'parts', false, 0, () => practicePart(id));
+}
+
+function practiceWrong(){
+  const all = [1,2,3,4,5,6,7].flatMap(poolFor);
+  const st = q => S.qstats[qkey(q)] || {wrong:0, streak:0};
+  const due = all.filter(q => st(q).wrong > 0 && st(q).streak < 2)
+                 .sort((a, b) => st(b).wrong - st(a).wrong).slice(0, 20);
+  if (!due.length) return alert('Chưa có câu nào cần ôn lại.');
+  startQuiz('Ôn câu đã sai', due, null, 'parts', false, 0, practiceWrong);
+}
+
+/* =========================================================
    TRẠNG THÁI
    ========================================================= */
 const KEY = 'toeic850-data';
 const DEFAULT = {target:850, quiz:{correct:0,total:0}, reading:{correct:0,total:0}, lq:{correct:0,total:0},
-                 listen:{done:0,score:0}, vocab:{}, history:[]};
+                 listen:{done:0,score:0}, vocab:{}, history:[], qstats:{}};
 const clone = o => JSON.parse(JSON.stringify(o));
-function load(){ try { return Object.assign(clone(DEFAULT), JSON.parse(localStorage.getItem(KEY)) || {}); } catch(e) { return clone(DEFAULT); } }
+/* Chỉ giữ lại dữ liệu đúng kiểu, vì dữ liệu localStorage hoặc file nhập vào không đáng tin tuyệt đối */
+function sanitize(raw){
+  const out = clone(DEFAULT);
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return out;
+  const num = v => (Number.isFinite(v) && v >= 0) ? Math.min(v, 1e7) : 0;
+  const pair = p => ({correct: num(p && p.correct), total: num(p && p.total)});
+  out.target = (Number.isFinite(raw.target) && raw.target >= 10 && raw.target <= 990) ? raw.target : 850;
+  out.quiz = pair(raw.quiz); out.reading = pair(raw.reading); out.lq = pair(raw.lq);
+  out.listen = {done: num(raw.listen && raw.listen.done), score: num(raw.listen && raw.listen.score)};
+  if (raw.vocab && typeof raw.vocab === 'object' && !Array.isArray(raw.vocab))
+    out.vocab = Object.fromEntries(Object.entries(raw.vocab).slice(0, 5000)
+      .filter(([k, v]) => k.length <= 80 && v && typeof v === 'object')
+      .map(([k, v]) => [k, {known: v.known === true, seen: num(v.seen)}]));
+  if (Array.isArray(raw.history))
+    out.history = raw.history.slice(0, 30).filter(h => h && typeof h === 'object')
+      .map(h => ({date: String(h.date || '').slice(0, 40), name: String(h.name || '').slice(0, 80),
+                  score: String(h.score || '').slice(0, 20), pct: num(h.pct)}));
+  if (raw.qstats && typeof raw.qstats === 'object' && !Array.isArray(raw.qstats))
+    out.qstats = Object.fromEntries(Object.entries(raw.qstats).slice(0, 5000)
+      .filter(([k, v]) => k.length <= 40 && v && typeof v === 'object')
+      .map(([k, v]) => [k, {seen: num(v.seen), wrong: num(v.wrong), streak: num(v.streak), p: num(v.p)}]));
+  return out;
+}
+function load(){ try { return sanitize(JSON.parse(localStorage.getItem(KEY))); } catch(e) { return clone(DEFAULT); } }
 function save(){ localStorage.setItem(KEY, JSON.stringify(S)); }
 let S = load();
 let Q = null, tid = null, vcur = null, lcur = '';
@@ -338,7 +468,7 @@ const shuffle = a => { const b = [...a]; for (let i = b.length-1; i > 0; i--) { 
 const prep = q => {
   const base = q.o.map((_,k) => k);
   const idx = q.noshuf ? base : shuffle(base);
-  return {...q, o: idx.map(k => q.o[k]), a: idx.indexOf(q.a)};
+  return {...q, key: qkey(q), o: idx.map(k => q.o[k]), a: idx.indexOf(q.a)};
 };
 
 /* =========================================================
@@ -467,7 +597,7 @@ function drawQ(){
   app.innerHTML = `
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
-        <span class="muted">${esc(Q.name)}${q.part && q.part !== Q.name ? ' · ' + q.part : ''} — Câu ${Q.i+1}/${total}</span>
+        <span class="muted">${esc(Q.name)}${q.part && q.part !== Q.name ? ' · ' + esc(q.part) : ''} — Câu ${Q.i+1}/${total}</span>
         ${Q.mock ? '<span class="timer" id="timer"></span>' : ''}
       </div>
       <div class="bar" style="margin:8px 0 14px"><div style="width:${Q.i/total*100}%"></div></div>
@@ -486,6 +616,7 @@ function pick(k){
   Q.answered = true;
   const q = Q.qs[Q.i], ok = k === q.a;
   if (ok) Q.c++; else Q.wrong.push(q);
+  recordAnswer(q, ok);
   const btns = document.querySelectorAll('.opt');
   btns[q.a].classList.add('right');
   if (!ok) btns[k].classList.add('wrong');
@@ -500,7 +631,7 @@ function nextQ(){ Q.i++; Q.answered = false; drawQ(); }
 function finishQ(){
   stopTimer();
   const total = Q.qs.length, pct = Math.round(Q.c/total*100);
-  S[Q.statKey].correct += Q.c; S[Q.statKey].total += total;
+  if (Q.statKey) { S[Q.statKey].correct += Q.c; S[Q.statKey].total += total; }
   S.history.unshift({date: new Date().toLocaleString('vi-VN'), name: Q.name, score: `${Q.c}/${total}`, pct});
   S.history = S.history.slice(0,30);
   save();
@@ -565,9 +696,11 @@ function exportData(){
 }
 function importData(f){
   if (!f) return;
+  if (f.size > 1024 * 1024) { alert('File quá lớn (tối đa 1 MB).'); return; }
+  if (f.type && f.type !== 'application/json') { alert('Chỉ nhận file .json.'); return; }
   const r = new FileReader();
   r.onload = () => {
-    try { S = Object.assign(clone(DEFAULT), JSON.parse(r.result)); save(); route('home'); }
+    try { S = sanitize(JSON.parse(r.result)); save(); route('home'); }
     catch(e) { alert('File không hợp lệ.'); }
   };
   r.readAsText(f);
@@ -635,6 +768,9 @@ function partsView(){
       <p>Đề có 200 câu, thi trong khoảng 2 giờ. Phần Nghe (Part 1–4) có 100 câu, khoảng 45 phút. Phần Đọc (Part 5–7) có 100 câu, khoảng 75 phút.</p>
       <p class="muted">Chọn một Part để xem chiến lược, tip, trick, bẫy thường gặp và gợi ý nhanh.</p>
       <div>${tabs}</div>
+      <p class="muted">${DB_STATUS === 'ok' ? `Ngân hàng câu hỏi: ${DB_QS.length} câu từ Supabase.` : DB_STATUS === 'loading' ? 'Đang tải ngân hàng câu hỏi...' : 'Không tải được Supabase, đang dùng câu hỏi có sẵn trong app.'}</p>
+      <p>Độ chính xác theo Part: ${[1,2,3,4,5,6,7].map(n => `Part ${n}: ${partAccuracy(n)}`).join(' · ')}</p>
+      <button class="btn alt" onclick="practiceWrong()">Ôn câu đã sai</button>
     </div>
     <div class="card">
       <h3 style="margin-top:0">${esc(p.title)}</h3>
@@ -649,16 +785,6 @@ function partsView(){
 }
 let vpart = 'p1';
 function setPart(id){ vpart = id; partsView(); }
-function practicePart(id){
-  const p = PARTS.find(x => x.id === id);
-  if (id === 'p5') return startQuiz('Part 5', GRAMMAR, 'quiz', 'parts', false, 0, () => practicePart('p5'));
-  if (id === 'p6' || id === 'p7') {
-    const qs = READING_QS.filter(q => q.part === p.label);
-    return startQuiz(p.label, qs, 'reading', 'parts', false, 0, () => practicePart(id));
-  }
-  const qs = LISTEN_QS.filter(q => q.part === p.label);
-  return startQuiz(p.label, qs, 'lq', 'parts', false, 0, () => practicePart(id));
-}
 
 const SECTIONS = {home:homeView, vocab:vocabView, grammar:grammarQuiz, reading:readingQuiz,
                   listen:listenQuiz, dictation:dictView, mock:mockTest, parts:partsView, ai:chatView};
@@ -874,6 +1000,7 @@ function toggleLang(){
 
 applyLangUI();
 langObserver.observe(document.body, {childList:true, subtree:true, characterData:true});
+loadQuestions();
 route('home');
 </script>
 </body>
