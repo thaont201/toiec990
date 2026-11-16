@@ -1,0 +1,880 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TOEIC 850 - Luyện thi cá nhân</title>
+<style>
+:root{--main:#2563eb;--ok:#16a34a;--bad:#dc2626;--bg:#f1f5f9;--card:#fff;--text:#0f172a;--muted:#64748b}
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--text)}
+header{background:var(--main);color:#fff;padding:14px 20px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px}
+header h1{font-size:20px;margin:0}
+nav{display:flex;flex-wrap:wrap;gap:6px}
+nav button{background:rgba(255,255,255,.15);color:#fff;border:0;padding:8px 12px;border-radius:8px;cursor:pointer}
+nav button.active{background:#fff;color:var(--main);font-weight:600}
+main{max-width:860px;margin:20px auto;padding:0 16px}
+.card{background:var(--card);border-radius:14px;padding:22px;box-shadow:0 2px 8px rgba(0,0,0,.06);margin-bottom:16px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+.stat{background:#f8fafc;border-radius:12px;padding:16px;text-align:center}
+.stat b{display:block;font-size:26px;color:var(--main)}
+.stat span{color:var(--muted);font-size:13px}
+.btn{background:var(--main);color:#fff;border:0;padding:10px 16px;border-radius:8px;cursor:pointer;font-size:15px;margin:4px 4px 4px 0;display:inline-block}
+.btn.alt{background:#e2e8f0;color:var(--text)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.opt{display:block;width:100%;text-align:left;background:#f8fafc;border:2px solid #e2e8f0;border-radius:10px;padding:12px;margin:8px 0;cursor:pointer;font-size:15px;color:var(--text)}
+.opt.right{border-color:var(--ok);background:#dcfce7}
+.opt.wrong{border-color:var(--bad);background:#fee2e2}
+.flash{min-height:180px;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;cursor:pointer;border:2px dashed #cbd5e1;border-radius:12px;padding:20px;user-select:none}
+.flash .word{font-size:30px;font-weight:700}
+.exp{background:#eff6ff;border-radius:10px;padding:12px;margin-top:10px;line-height:1.5}
+.passage{background:#f8fafc;white-space:pre-line;line-height:1.6;margin:0 0 14px}
+textarea{width:100%;min-height:110px;padding:10px;border-radius:8px;border:1px solid #cbd5e1;font-size:15px;font-family:inherit;margin-top:10px}
+.timer{font-size:20px;font-weight:700;color:var(--bad)}
+.muted{color:var(--muted)}
+.bar{height:10px;background:#e2e8f0;border-radius:6px;overflow:hidden}
+.bar div{height:100%;background:var(--main);transition:width .3s}
+</style>
+</head>
+<body>
+<header>
+  <h1>🎯 TOEIC 850</h1>
+  <button id="langbtn" onclick="toggleLang()" style="background:#fff;color:var(--main);border:0;padding:8px 12px;border-radius:8px;font-weight:700;cursor:pointer"></button>
+  <nav id="nav"></nav>
+</header>
+<main id="app"></main>
+
+<script src="vocab.js"></script>
+<script>
+/* =========================================================
+   DỮ LIỆU
+   ========================================================= */
+
+/* Từ vựng (flashcard) */
+const VOCAB_BASE = [
+  {w:'allocate',m:'phân bổ, cấp cho',ex:'The department was allocated a larger budget this year.'},
+  {w:'invoice',m:'hóa đơn',ex:'Please send the invoice before the end of the month.'},
+  {w:'reimburse',m:'hoàn trả chi phí',ex:'The company will reimburse your travel expenses.'},
+  {w:'negotiate',m:'đàm phán',ex:'We are negotiating a new contract with the supplier.'},
+  {w:'postpone',m:'hoãn lại',ex:'The meeting was postponed until next week.'},
+  {w:'revenue',m:'doanh thu',ex:'Quarterly revenue rose by ten percent.'},
+  {w:'warranty',m:'bảo hành',ex:'The laptop is covered by a two-year warranty.'},
+  {w:'eligible',m:'đủ điều kiện',ex:'Only full-time staff are eligible for the bonus.'},
+  {w:'inventory',m:'hàng tồn kho',ex:'The warehouse inventory is checked every month.'},
+  {w:'merger',m:'sáp nhập',ex:'The merger created one of the largest banks in the region.'},
+  {w:'discrepancy',m:'sự sai lệch',ex:'There is a discrepancy between the two reports.'},
+  {w:'accommodate',m:'đáp ứng, chứa được',ex:'The new hall can accommodate 300 guests.'},
+  {w:'enclosed',m:'được đính kèm',ex:'Please find the contract enclosed with this letter.'},
+  {w:'tentative',m:'dự kiến, tạm thời',ex:'The tentative date for the launch is March 5.'},
+  {w:'substantial',m:'đáng kể',ex:'The project required a substantial investment.'},
+  {w:'expedite',m:'đẩy nhanh',ex:'We will expedite the shipment for an extra fee.'},
+  {w:'retain',m:'giữ lại',ex:'The firm works hard to retain its best employees.'},
+  {w:'surpass',m:'vượt qua',ex:'Sales surpassed our expectations in the second quarter.'},
+  {w:'liable',m:'chịu trách nhiệm pháp lý',ex:'The owner is liable for any damage to the property.'},
+  {w:'complimentary',m:'miễn phí (tặng kèm)',ex:'Breakfast is complimentary for all hotel guests.'},
+  {w:'prior to',m:'trước khi',ex:'Please review the policy prior to your first day.'},
+  {w:'implement',m:'triển khai',ex:'The team will implement the new system next month.'},
+  {w:'appoint',m:'bổ nhiệm',ex:'The board appointed a new chief financial officer.'},
+  {w:'outstanding',m:'xuất sắc; chưa thanh toán',ex:'The customer still has an outstanding balance.'},
+  {w:'hinder',m:'cản trở',ex:'Bad weather may hinder the delivery of goods.'},
+  {w:'commence',m:'bắt đầu',ex:'Construction will commence in early spring.'},
+  {w:'proofread',m:'soát lỗi',ex:'Please proofread the document before printing.'},
+  {w:'forfeit',m:'mất (quyền, tiền cọc)',ex:'You may forfeit the deposit if you cancel late.'}
+];
+
+/* Bộ từ vựng đầy đủ: 28 từ mẫu + 1000 từ trong vocab.js */
+/* Nếu thiếu vocab.js thì app vẫn chạy với 28 từ mẫu, không bị trắng trang */
+const VOCAB_MISSING = typeof VOCAB_EXTRA === 'undefined';
+const VOCAB = VOCAB_MISSING ? VOCAB_BASE : mergeVocab(VOCAB_BASE, VOCAB_EXTRA);
+
+/* ---- Chuyển IPA sang cách đọc bằng chữ (ước lượng gần đúng, trọng âm viết HOA) ---- */
+const IPA_MAP = [
+  ['tʃ',''], ['dʒ','j'], ['ɪər','ia'], ['ɪr','ia'], ['ɜːr','ơ'], ['ɜr','ơ'], ['ɝ','ơ'], ['ɚ','ơ'],
+  ['ər','ơ'], ['ɔːr','o'], ['ɔr','o'], ['ɑr','a'], ['ɛr','e'], ['er','e'], ['ʊər','ua'], ['ʊr','u'],
+  ['oʊ','ô'], ['əʊ','ô'], ['aɪ','ai'], ['eɪ','ây'], ['aʊ','ao'], ['ɔɪ','oi'], ['iː','i'], ['uː','u'],
+  ['ɑː','a'], ['ɔː','o'], ['ɪ','i'], ['ɛ','e'], ['æ','a'], ['ɑ','a'], ['ɒ','o'], ['ɔ','o'], ['ʌ','ă'],
+  ['ə','ơ'], ['ʊ','u'], ['θ',''], ['ð',''], ['ʃ',''], ['ʒ',''], ['ŋ',''],
+  ['j','y'], ['ɡ','g'], ['ɹ','r'], ['ɾ','t'], ['ˈ','|'], ['ˌ','|'], ['ː','']
+];
+const IPA_SORTED = [...IPA_MAP].sort((a, b) => b[0].length - a[0].length);
+const DIGRAPH_BACK = {'':'ch','':'sh','':'th','':'ng','':'zh'};
+
+/* Hai nguyên âm đứng sát nhau (ví dụ ɪ + ə) được đánh dấu là hai âm tiết riêng */
+const IPA_VOWEL = 'ɜːr|ɪər|ʊər|ɔːr|ɜː|ɪr|ər|ɔr|ɑr|ɛr|iː|uː|ɑː|ɔː|oʊ|əʊ|aɪ|eɪ|aʊ|ɔɪ|ɪ|ɛ|æ|ɑ|ɒ|ɔ|ʌ|ə|ʊ|ɜ|i|u|e|o|a';
+const SYL_MARK = '';
+const VOWEL_TOKENS = IPA_VOWEL.split('|').sort((a, b) => b.length - a.length);
+function markSyllables(s){
+  let out = '', i = 0, prevVowel = false;
+  while (i < s.length) {
+    const v = VOWEL_TOKENS.find(tok => s.startsWith(tok, i));
+    if (v) {
+      if (prevVowel) out += SYL_MARK;
+      out += v; i += v.length; prevVowel = true;
+    } else {
+      out += s[i]; i++; prevVowel = false;
+    }
+  }
+  return out;
+}
+
+function respell(ipa){
+  if (!ipa) return '';
+  return ipa.replace(/\//g, '').trim().split(/\s+/).map(w => {
+    let t = markSyllables(w);
+    IPA_SORTED.forEach(([a, b]) => { t = t.split(a).join(b); });
+    const parts = t.split(/([aeiouơăôâê]+y?)/);
+    const cl = [], vs = [];
+    parts.forEach((p, k) => (k % 2 === 0 ? cl : vs).push(p));
+    const n = vs.length;
+    if (n === 0) return t.replace(/\||/g, '');
+    const stressed = new Set();
+    cl.forEach((c, i) => { if (c.includes('|')) stressed.add(i); });
+    const clean = cl.map(c => c.replace(/\||/g, ''));
+    const onset = [], coda = [];
+    onset[0] = clean[0];
+    for (let i = 1; i < n; i++) {
+      const c = clean[i];
+      if (cl[i].includes(SYL_MARK)) { coda[i-1] = ''; onset[i] = c; }
+      else if (c.length >= 2) { coda[i-1] = c[0]; onset[i] = c.slice(1); }
+      else { coda[i-1] = ''; onset[i] = c; }
+    }
+    coda[n-1] = clean[n];
+    const out = [];
+    for (let i = 0; i < n; i++) {
+      let s = onset[i] + vs[i] + coda[i];
+      s = s.replace(/[-]/g, ch => DIGRAPH_BACK[ch]);
+      out.push(stressed.has(i) ? s.toUpperCase() : s);
+    }
+    return out.join('-');
+  }).join(' ');
+}
+
+/* ---- Chia từ vựng thành nhóm 20 từ theo chủ đề ---- */
+const GROUP_SIZE = 20;
+const GROUPS = (() => {
+  const byTopic = {}, order = [];
+  VOCAB.forEach(v => {
+    const t = v.topic || 'Từ mẫu';
+    if (!byTopic[t]) { byTopic[t] = []; order.push(t); }
+    byTopic[t].push(v);
+  });
+  const out = [];
+  order.forEach(t => {
+    const list = byTopic[t];
+    for (let i = 0; i < list.length; i += GROUP_SIZE) {
+      out.push({title: `${t} · Nhóm ${Math.floor(i / GROUP_SIZE) + 1}`, words: list.slice(i, i + GROUP_SIZE)});
+    }
+  });
+  return out;
+})();
+let vgroup = 0;
+function groupKnown(g){ return g.words.filter(v => S.vocab[v.w] && S.vocab[v.w].known).length; }
+function setGroup(i){ vgroup = +i; vocabView(); }
+function nextGroup(){ vgroup = (vgroup + 1) % GROUPS.length; vocabView(); }
+function resetGroup(){
+  GROUPS[vgroup].words.forEach(v => { if (S.vocab[v.w]) S.vocab[v.w].known = false; });
+  save(); vocabView();
+}
+
+/* Part 5 - Ngữ pháp và từ vựng (30 câu) */
+const GRAMMAR = [
+  {q:'The manager insisted that the report ___ by Friday.',o:['be submitted','is submitted','submitted','submitting'],a:0,e:'Sau "insist that" (yêu cầu), động từ dùng dạng nguyên thể không "to". Câu bị động là "be submitted".'},
+  {q:'___ the heavy rain, the match continued as scheduled.',o:['Despite','Although','However','Because'],a:0,e:'"Despite" đi với danh từ. "Although" và "because" cần một mệnh đề đầy đủ, còn "however" là trạng từ nối nên không đứng trước cụm danh từ.'},
+  {q:'The new software is ___ easier to use than the old version.',o:['much','very','many','quite'],a:0,e:'Dùng "much" (hoặc "far", "a lot") để nhấn mạnh dạng so sánh hơn. "Very" không đi với so sánh hơn.'},
+  {q:'Employees must wear their ID badges ___ they are in the office.',o:['whenever','despite','unless','although'],a:0,e:'"Whenever" nghĩa là bất cứ khi nào. Các lựa chọn còn lại không hợp nghĩa hoặc sai cấu trúc.'},
+  {q:'Last year the company ___ its headquarters to Hanoi.',o:['relocated','relocating','relocate','relocations'],a:0,e:'"Last year" là dấu hiệu của thì quá khứ đơn, nên động từ phải ở dạng quá khứ.'},
+  {q:'Ms. Lee has been ___ the sales team since 2020.',o:['leading','lead','led','leads'],a:0,e:'Thì hiện tại hoàn thành tiếp diễn (has been + V-ing) diễn tả hành động bắt đầu trong quá khứ và kéo dài đến hiện tại.'},
+  {q:'All applications must be received ___ June 30.',o:['by','until','during','among'],a:0,e:'"By" + mốc thời gian nghĩa là trước hoặc vào đúng thời điểm đó, thường dùng cho hạn chót.'},
+  {q:'The package ___ delivered to the wrong address yesterday.',o:['was','were','has','are'],a:0,e:'Chủ ngữ "package" số ít và hành động xảy ra hôm qua, nên dùng "was" trong câu bị động.'},
+  {q:'Neither the director nor the managers ___ aware of the change.',o:['were','was','is','been'],a:0,e:'Với "neither ... nor", động từ chia theo danh từ đứng gần nhất. Ở đây là "managers" (số nhiều) nên dùng "were".'},
+  {q:'If I ___ more time, I would finish the project.',o:['had','have','having','will have'],a:0,e:'Đây là câu điều kiện loại 2: If + quá khứ đơn, would + động từ nguyên thể.'},
+  {q:'The conference room ___ for the meeting at 10 a.m.',o:['has been reserved','reserved','is reserving','has reserved'],a:0,e:'Phòng được đặt trước nên cần bị động (has been + V3). "Has reserved" là chủ động nên không hợp nghĩa.'},
+  {q:'Please inform us ___ any changes to the schedule.',o:['of','about','for','to'],a:0,e:'Cấu trúc chuẩn là "inform somebody of something": thông báo cho ai về điều gì.'},
+  {q:'The proposal, along with the budget reports, ___ reviewed by the board next week.',o:['will be','are','have been','being'],a:0,e:'Chủ ngữ chính là "The proposal" (số ít). Cụm "along with" không làm thay đổi số của động từ.'},
+  {q:'Having finished the report, she ___ to the client meeting.',o:['went','goes','going','gone'],a:0,e:'Cụm "Having finished" chỉ hành động xảy ra trước. Mệnh đề chính dùng quá khứ đơn "went".'},
+  {q:'The printer ___ since Monday, so please call the technician.',o:['has not been working','did not work','is not work','not working'],a:0,e:'Sự việc bắt đầu từ thứ Hai và vẫn đang tiếp diễn, nên dùng hiện tại hoàn thành tiếp diễn.'},
+  {q:'We are looking for a candidate who is ___ to work under pressure.',o:['able','ability','ably','abled'],a:0,e:'Sau động từ "is" cần một tính từ. "Able to + V" nghĩa là có khả năng làm việc gì.'},
+  {q:'The annual report must be approved by the board ___ it is published.',o:['before','despite','although','during'],a:0,e:'"Before" chỉ thời gian: báo cáo phải được duyệt trước khi công bố.'},
+  {q:'___ her previous experience in marketing, Ms. Park was hired as a brand manager.',o:['Given','Giving','To give','Gives'],a:0,e:'"Given + danh từ" nghĩa là xét đến điều gì. Đây là dạng rút gọn phân từ, tương đương "considering".'},
+  {q:'The workshop is open to ___ employees who have completed the basic course.',o:['all','every','each','much'],a:0,e:'"All" + danh từ số nhiều nghĩa là tất cả. "Every" và "each" đi với danh từ số ít.'},
+  {q:'Our flight was delayed because of ___ weather conditions.',o:['poor','poorly','poorness','poorest'],a:0,e:'Cần tính từ đứng trước danh từ "weather conditions". "Poorly" là trạng từ nên không bổ nghĩa cho danh từ.'},
+  {q:'Please make sure the documents are ___ before the meeting.',o:['ready','readily','readiness','readied'],a:0,e:'Sau động từ "are" cần tính từ "ready". "Readily" là trạng từ nên không hợp vị trí này.'},
+  {q:'The sales figures ___ higher than expected last quarter.',o:['were','was','is','has been'],a:0,e:'Chủ ngữ "figures" số nhiều và có dấu hiệu quá khứ "last quarter", nên dùng "were".'},
+  {q:'Hardly ___ the office when the phone began to ring.',o:['had she entered','she had entered','she entered','did she enter'],a:0,e:'Đảo ngữ với "hardly ... when": Hardly + had + chủ ngữ + V3.'},
+  {q:'Applicants should ___ a copy of their diploma with the application form.',o:['attach','attachment','attached','attaching'],a:0,e:'Sau động từ khuyết "should" cần động từ nguyên thể "attach".'},
+  {q:'The discount will apply ___ next Tuesday.',o:['from','since','during','for'],a:0,e:'"From" + mốc thời gian nghĩa là bắt đầu từ thời điểm đó.'},
+  {q:'The city council ___ a new policy to reduce traffic last month.',o:['introduced','introduce','introducing','introduction'],a:0,e:'"Last month" là dấu hiệu của thì quá khứ đơn, nên dùng "introduced".'},
+  {q:'Mr. Chen is one of the ___ experienced engineers in the company.',o:['most','more','much','very'],a:0,e:'Cấu trúc "one of the most + tính từ dài" dùng dạng so sánh nhất.'},
+  {q:'The contract, ___ was signed last week, will expire next year.',o:['which','who','whom','whose'],a:0,e:'Đại từ quan hệ "which" thay cho danh từ chỉ vật ("contract").'},
+  {q:'I would appreciate ___ the document by Friday.',o:['your returning','you return','you to return','you returned'],a:0,e:'Sau "appreciate" dùng V-ing hoặc danh từ, nên cần cấu trúc "your returning".'},
+  {q:'The position requires ___ fluency in English and Japanese.',o:['strong','strongly','strength','strengthen'],a:0,e:'Cần tính từ "strong" để bổ nghĩa cho danh từ "fluency".'}
+];
+
+/* Part 6 & Part 7 - Đọc hiểu (mỗi bộ có đoạn văn và các câu hỏi) */
+const READING_SETS = [
+  {part:'Part 7', ctx:'MEMO: Effective Monday, the Accounts Department will move from Floor 3 to Floor 5 while the west wing is renovated. All invoices must be submitted through the new online portal, as paper forms will no longer be accepted after March 15. Staff who need access to the old filing cabinets should contact Mr. Tran by Friday to arrange a time.',
+   qs:[
+    {q:'Where will the Accounts Department be located during the renovation?',o:['Floor 5','Floor 3','The west wing','The online portal'],a:0,e:'Thông báo nói bộ phận Kế toán sẽ chuyển lên tầng 5 trong thời gian cải tạo.'},
+    {q:'How must invoices be submitted after March 15?',o:['Through the online portal','On paper forms','By email to Mr. Tran','In person on Floor 3'],a:0,e:'Từ ngày 15/3, hóa đơn phải nộp qua cổng trực tuyến; biểu mẫu giấy không còn được chấp nhận.'},
+    {q:'What should staff do by Friday if they need the old filing cabinets?',o:['Contact Mr. Tran','Submit an invoice','Move to Floor 5','Attend a training session'],a:0,e:'Nhân viên cần liên hệ ông Trần trước thứ Sáu để sắp xếp thời gian truy cập tủ hồ sơ cũ.'}
+   ]},
+  {part:'Part 6', ctx:'Dear Ms. Nguyen,\nThank you for applying for the marketing position. We would like to invite you to an interview. The interview [1] on Thursday, May 14, at 10:00 a.m. Please bring your portfolio and a copy of your resume [3] the interview. If you need to reschedule, please contact us [2] Wednesday.\nWe look forward to meeting you.\nSincerely,\nHR Department',
+   qs:[
+    {q:'Choose the best option for blank [1].',o:['is scheduled','scheduling','schedule','has scheduled'],a:0,e:'Buổi phỏng vấn được lên lịch (bị động), nên dùng "is scheduled" ở thì hiện tại.'},
+    {q:'Choose the best option for blank [2].',o:['by','until','among','beside'],a:0,e:'Cần giới từ chỉ hạn chót: "by Wednesday" nghĩa là trước hoặc vào thứ Tư.'},
+    {q:'Choose the best option for blank [3].',o:['to','for','about','among'],a:0,e:'"Bring ... to the interview" nghĩa là mang đến buổi phỏng vấn, nên "to" là giới từ đúng.'}
+   ]},
+  {part:'Part 6', ctx:'NOTICE TO TENANTS\nThe building\'s water supply will be shut off on Saturday, April 9, [1] 8 a.m. to noon for maintenance. Residents should store enough water beforehand. Any questions [2] the schedule should be directed to the management office. Thank you for your [3] during this work.',
+   qs:[
+    {q:'Choose the best option for blank [1].',o:['from','since','until','during'],a:0,e:'Cấu trúc "from ... to" chỉ khoảng thời gian.'},
+    {q:'Choose the best option for blank [2].',o:['about','among','beside','within'],a:0,e:'Cụm "questions about" nghĩa là câu hỏi về điều gì.'},
+    {q:'Choose the best option for blank [3].',o:['patience','patient','patiently','patients'],a:0,e:'Sau "your" cần một danh từ: "patience".'}
+   ]},
+  {part:'Part 7', ctx:'Riverside Language Center — Summer Intensive Course\nDates: July 3–28. Fee: $450, which includes textbooks. Early registration: 15% off if you register before June 10. Classes meet Monday to Friday, 9 a.m. to 12 p.m. All students must complete an online placement test before the first day.',
+   qs:[
+    {q:'What is the 15% discount for?',o:['Registering before June 10','Paying the fee in cash','Enrolling in an evening class','Bringing a friend'],a:0,e:'Thông báo giảm 15% cho người đăng ký trước ngày 10/6.'},
+    {q:'What must all students do before the first day?',o:['Take an online placement test','Buy textbooks separately','Pay the fee on the first day','Register in person'],a:0,e:'Mọi học viên phải làm bài kiểm tra xếp lớp trực tuyến trước ngày học đầu tiên.'}
+   ]},
+  {part:'Part 7', ctx:'From: Kevin Lam\nTo: Project Team\nSubject: Demo moved\nThe client has asked us to move the product demonstration from Tuesday to Wednesday at 2 p.m. Our engineers need one more day to finish the prototype, so I have booked Room B for Wednesday. Please update your calendars and tell me if you have any conflicts.',
+   qs:[
+    {q:'Which room has Kevin booked?',o:['Room B','Room A','The client office','The main hall'],a:0,e:'Kevin đã đặt phòng B cho thứ Tư.'},
+    {q:'Why does the demonstration need to be moved?',o:['The engineers need more time for the prototype','The client is leaving the city','Room B is closed on Tuesday'],a:0,e:'Kỹ sư cần thêm một ngày để hoàn thành nguyên mẫu, nên buổi trình diễn được dời sang thứ Tư.'}
+   ]},
+  {part:'Part 7', ctx:'Mosaic Café — Customer Review ★★★☆☆\nThe coffee is excellent and the staff are friendly. However, the Wi-Fi was slow, and we waited about thirty minutes for a table at lunchtime. I would recommend visiting in the morning.',
+   qs:[
+    {q:"What is the reviewer's main complaint?",o:['Slow internet and long waits','Unfriendly staff','Expensive coffee','Small portions'],a:0,e:'Người viết phàn nàn về Wi-Fi chậm và thời gian chờ bàn lâu vào giờ trưa.'},
+    {q:'What does the reviewer suggest?',o:['Visiting in the morning','Ordering takeaway only','Bringing a laptop','Booking a table in advance'],a:0,e:'Người viết khuyên nên đến vào buổi sáng.'}
+   ]}
+];
+
+/* Part 1 - 4 (nghe). Part 1 dùng mô tả thay cho ảnh; Part 2-4 chỉ có âm thanh. */
+const LISTEN_SETS = [
+  {part:'Part 1', ctx:'Ảnh (mô tả thay cho ảnh thật): A man in a blue shirt is typing on a laptop at a wooden desk, with a coffee cup beside him.', noshuf:true,
+   audio:[{t:'A. A man is typing on a laptop.'},{t:'B. A woman is pouring coffee into a cup.'},{t:'C. Some people are sitting at a long table.'},{t:'D. The desk is covered with papers.'}],
+   qs:[{q:'Câu nào mô tả đúng bức ảnh nhất?',o:['A','B','C','D'],a:0,e:'Câu A khớp với cảnh người đàn ông đang gõ trên máy tính. Các câu còn lại sai chi tiết.'}]},
+  {part:'Part 1', ctx:'Ảnh (mô tả thay cho ảnh thật): Three workers in hard hats are standing beside a large truck on a construction site.', noshuf:true,
+   audio:[{t:'A. They are repairing a bicycle.'},{t:'B. They are standing near a truck.'},{t:'C. They are inside a supermarket.'},{t:'D. They are sitting on the grass.'}],
+   qs:[{q:'Câu nào mô tả đúng bức ảnh nhất?',o:['A','B','C','D'],a:1,e:'Câu B đúng vì ba người đứng gần xe tải trên công trường.'}]},
+  {part:'Part 1', ctx:'Ảnh (mô tả thay cho ảnh thật): A waiter is carrying a tray of drinks across a crowded restaurant.', noshuf:true,
+   audio:[{t:'A. The restaurant is empty.'},{t:'B. A waiter is cleaning the windows.'},{t:'C. A waiter is carrying drinks.'},{t:'D. Customers are cooking in the kitchen.'}],
+   qs:[{q:'Câu nào mô tả đúng bức ảnh nhất?',o:['A','B','C','D'],a:2,e:'Câu C đúng vì người phục vụ đang bưng đồ uống trong nhà hàng đông khách.'}]},
+  {part:'Part 2', audio:[{t:'Where is the nearest train station?'}],
+   qs:[{q:'Chọn câu trả lời phù hợp nhất.',o:['It is two blocks from here.','Yes, I took the train.','The station is closed on Sundays.'],a:0,e:'Câu hỏi về địa điểm, nên đáp án đúng nêu vị trí.'}]},
+  {part:'Part 2', audio:[{t:'Why was the meeting moved to Thursday?'}],
+   qs:[{q:'Chọn câu trả lời phù hợp nhất.',o:['Because the manager is traveling on Wednesday.','The meeting room is very large.','I will send the agenda.'],a:0,e:'Câu hỏi "why" cần lý do: quản lý đi công tác hôm thứ Tư.'}]},
+  {part:'Part 2', audio:[{t:'Would you like me to print the report for you?'}],
+   qs:[{q:'Chọn câu trả lời phù hợp nhất.',o:['Yes, please. That would be helpful.','The printer is on the second floor.','I printed it last week.'],a:0,e:'Đây là câu đề nghị, nên phản hồi đồng ý hoặc từ chối là phù hợp.'}]},
+  {part:'Part 2', audio:[{t:'Who is responsible for the new marketing campaign?'}],
+   qs:[{q:'Chọn câu trả lời phù hợp nhất.',o:['Ms. Tran is leading it.','The campaign starts next month.','It is a very good idea.'],a:0,e:'Câu hỏi "who" cần tên người, nên đáp án đúng nêu người phụ trách.'}]},
+  {part:'Part 2', audio:[{t:'When will the invoice be ready?'}],
+   qs:[{q:'Chọn câu trả lời phù hợp nhất.',o:['By the end of the day.','In the invoice department.','It was a large invoice.'],a:0,e:'Câu hỏi "when" cần một thời điểm.'}]},
+  {part:'Part 2', audio:[{t:'How much did the new laptop cost?'}],
+   qs:[{q:'Chọn câu trả lời phù hợp nhất.',o:['It was about eight hundred dollars.','Yes, it works very well.','At the electronics store.'],a:0,e:'Câu hỏi "how much" cần một số tiền.'}]},
+  {part:'Part 3', audio:[
+    {t:'Hi Linda, did you get a chance to review the budget proposal?',v:0},
+    {t:'Yes, I did. I think the marketing costs are too high.',v:1},
+    {t:'I agree. Can we reduce the advertising budget by ten percent?',v:0},
+    {t:'That should work, but we need to keep the online campaign.',v:1},
+    {t:'Good idea. I will update the spreadsheet and send it to the director.',v:0}],
+   qs:[
+    {q:'What does the woman think about the budget?',o:['The marketing costs are too high.','The budget is too small.','The proposal is complete.'],a:0,e:'Người phụ nữ (Linda) nói chi phí marketing quá cao.'},
+    {q:'What does the man suggest?',o:['Reducing advertising by ten percent','Cancelling the online campaign','Hiring a new director'],a:0,e:'Người đàn ông đề nghị cắt giảm ngân sách quảng cáo 10%.'},
+    {q:'What will the man do next?',o:['Update the spreadsheet and send it to the director','Call the marketing team','Schedule a meeting for Friday'],a:0,e:'Người đàn ông sẽ cập nhật bảng tính và gửi cho giám đốc.'}]},
+  {part:'Part 3', audio:[
+    {t:'Excuse me, I have a reservation under the name Harris for two people at seven.',v:0},
+    {t:'Let me check. Yes, Mr. Harris. Your table is ready, but it will be a few minutes.',v:1},
+    {t:'That is fine. Could we wait at the bar?',v:0},
+    {t:'Of course. I will bring you a drink while you wait.',v:1},
+    {t:'Thank you. Also, is the terrace open tonight?',v:0},
+    {t:'Unfortunately, it is closed because of the rain.',v:1}],
+   qs:[
+    {q:'What is the reservation for?',o:['Two people at seven o\'clock','Four people at eight o\'clock','A table on the terrace'],a:0,e:'Ông Harris đặt bàn cho hai người lúc 7 giờ.'},
+    {q:'What does the woman offer while the man waits?',o:['A drink at the bar','A free dessert','A seat on the terrace'],a:0,e:'Người phụ nữ nói sẽ mang đồ uống cho ông trong lúc chờ.'},
+    {q:'Why is the terrace closed?',o:['Because of the rain','Because of a private event','Because it is being cleaned'],a:0,e:'Sân hiên đóng cửa vì trời mưa.'}]},
+  {part:'Part 4', audio:[{t:'Good morning, everyone. This is a reminder that the company picnic will take place this Saturday at Green Park. Buses will leave from the main office at nine a.m. and return by four p.m. Please register by Wednesday so we can plan the food. Employees with children are welcome to bring them along.'}],
+   qs:[
+    {q:'What is the purpose of the talk?',o:['To remind employees about a picnic','To announce a new manager','To explain a salary change'],a:0,e:'Bài nói nhắc nhân viên về buổi dã ngoại của công ty.'},
+    {q:'When should employees register?',o:['By Wednesday','On Saturday morning','At four p.m.'],a:0,e:'Nhân viên cần đăng ký trước thứ Tư.'},
+    {q:'Where will the buses leave from?',o:['The main office','Green Park','The parking lot'],a:0,e:'Xe buýt khởi hành từ văn phòng chính lúc 9 giờ sáng.'}]},
+  {part:'Part 4', audio:[{t:'Hello, this is Dr. Walsh calling from the City Clinic. I am calling to confirm your appointment on Monday at two thirty. Unfortunately, the doctor will be out that afternoon, so the appointment has moved to ten thirty in the morning. Please call us back at the number on your card if this time does not work for you.'}],
+   qs:[
+    {q:'Why is the speaker calling?',o:['To confirm an appointment','To cancel a payment','To offer a job'],a:0,e:'Bác sĩ gọi để xác nhận lịch hẹn.'},
+    {q:'What has changed?',o:['The appointment has moved to the morning','The clinic has moved to a new city','The doctor has retired'],a:0,e:'Lịch hẹn được dời từ chiều sang 10 giờ 30 sáng.'},
+    {q:'What should the listener do if the new time does not work?',o:['Call back using the number on the card','Visit the clinic on Monday','Send an email to Dr. Walsh'],a:0,e:'Người nghe nên gọi lại theo số trên thẻ khám.'}]}
+];
+
+/* Chép chính tả */
+const DICTATION = [
+  'Please send me the revised invoice by Thursday afternoon.',
+  'The board has postponed the decision until the next quarterly review.',
+  'Our sales team exceeded its target by twelve percent last month.',
+  'Could you confirm whether the conference room is available on Tuesday?',
+  'The shipment will arrive within three to five business days.',
+  'All employees are required to complete the safety training before June.',
+  'We would like to schedule a meeting to discuss the new contract terms.',
+  'Passengers should check in at least two hours before the scheduled departure.'
+];
+
+/* Danh sách câu hỏi đã làm phẳng để dùng cho engine */
+const READING_QS = READING_SETS.flatMap(s => s.qs.map(x => ({...x, part:s.part, ctx:s.ctx})));
+const LISTEN_QS = LISTEN_SETS.flatMap(s => s.qs.map(x => ({...x, part:s.part, ctx:s.ctx, audio:s.audio,
+  ts:s.audio.map(a => a.t).join(' '), noshuf:!!s.noshuf})));
+
+/* =========================================================
+   TRẠNG THÁI
+   ========================================================= */
+const KEY = 'toeic850-data';
+const DEFAULT = {target:850, quiz:{correct:0,total:0}, reading:{correct:0,total:0}, lq:{correct:0,total:0},
+                 listen:{done:0,score:0}, vocab:{}, history:[]};
+const clone = o => JSON.parse(JSON.stringify(o));
+function load(){ try { return Object.assign(clone(DEFAULT), JSON.parse(localStorage.getItem(KEY)) || {}); } catch(e) { return clone(DEFAULT); } }
+function save(){ localStorage.setItem(KEY, JSON.stringify(S)); }
+let S = load();
+let Q = null, tid = null, vcur = null, lcur = '';
+
+const app = document.getElementById('app');
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const shuffle = a => { const b = [...a]; for (let i = b.length-1; i > 0; i--) { const j = Math.floor(Math.random()*(i+1)); [b[i], b[j]] = [b[j], b[i]]; } return b; };
+const prep = q => {
+  const base = q.o.map((_,k) => k);
+  const idx = q.noshuf ? base : shuffle(base);
+  return {...q, o: idx.map(k => q.o[k]), a: idx.indexOf(q.a)};
+};
+
+/* =========================================================
+   TRANG CHỦ
+   ========================================================= */
+function homeView(){
+  const known = Object.values(S.vocab).filter(v => v.known).length;
+  const pct = (c,t) => t ? Math.round(c/t*100) : 0;
+  const hist = S.history.slice(0,8).map(h => `<li>${esc(h.date)} — ${esc(h.name)}: ${esc(h.score)} (${h.pct}%)</li>`).join('');
+  app.innerHTML = `
+    ${VOCAB_MISSING ? '<div class="card" style="background:#fef9c3">Thiếu file vocab.js cùng thư mục với index.html, nên hiện chỉ có 28 từ mẫu.</div>' : ''}
+    <div class="card">
+      <h2 style="margin:0 0 6px">Mục tiêu: ${S.target} điểm</h2>
+      <p class="muted" style="margin:0 0 14px">Các con số dưới đây là kết quả luyện tập cá nhân, không phải điểm thi chính thức.</p>
+      <div class="stats">
+        <div class="stat"><b>${known}/${VOCAB.length}</b><span>Từ vựng đã thuộc</span></div>
+        <div class="stat"><b>${pct(S.quiz.correct,S.quiz.total)}%</b><span>Part 5 (${S.quiz.total} câu)</span></div>
+        <div class="stat"><b>${pct(S.reading.correct,S.reading.total)}%</b><span>Part 6-7 (${S.reading.total} câu)</span></div>
+        <div class="stat"><b>${pct(S.lq.correct,S.lq.total)}%</b><span>Part 1-4 (${S.lq.total} câu)</span></div>
+        <div class="stat"><b>${S.listen.done ? Math.round(S.listen.score/S.listen.done) : 0}%</b><span>Chép chính tả (${S.listen.done} câu)</span></div>
+      </div>
+    </div>
+    <div class="card"><b>Tiến độ từ vựng</b>
+      <div class="bar" style="margin-top:8px"><div style="width:${known/VOCAB.length*100}%"></div></div></div>
+    <div class="card"><b>Gợi ý học mỗi ngày (khoảng 60 phút)</b>
+      <ul style="line-height:1.8">
+        <li>20 phút từ vựng.</li>
+        <li>15 phút Part 5 hoặc Part 6-7.</li>
+        <li>15 phút Part 1-4 (nghe).</li>
+        <li>10 phút chép chính tả.</li>
+        <li>Cuối tuần: một bài "Thi thử" và xem lại các câu sai.</li>
+      </ul></div>
+    <div class="card"><b>Lịch sử gần đây</b>
+      ${S.history.length ? `<ul style="line-height:1.8">${hist}</ul>` : '<p class="muted">Chưa có bài nào.</p>'}</div>
+    <div class="card"><b>Dữ liệu</b>
+      <p class="muted">Tiến độ được lưu trong trình duyệt này. Hãy xuất file định kỳ để lưu trữ hoặc chuyển sang máy khác.</p>
+      <button class="btn alt" onclick="exportData()">Xuất dữ liệu</button>
+      <label class="btn alt">Nhập dữ liệu<input type="file" accept="application/json" hidden onchange="importData(this.files[0])"></label>
+      <button class="btn alt" onclick="resetData()">Xóa tiến độ</button></div>`;
+}
+
+/* =========================================================
+   TỪ VỰNG (flashcard)
+   ========================================================= */
+function vocabView(){
+  const group = GROUPS[vgroup];
+  const pool = group.words.filter(v => !S.vocab[v.w] || !S.vocab[v.w].known);
+  const selector = `<select onchange="setGroup(this.value)" style="padding:8px;border-radius:8px;font-size:15px;width:100%;margin-bottom:10px">${GROUPS.map((g, i) => `<option value="${i}" ${i === vgroup ? 'selected' : ''}>${esc(g.title)} (${groupKnown(g)}/${g.words.length})</option>`).join('')}</select>`;
+  if (!pool.length) {
+    app.innerHTML = `<div class="card">${selector}🎉 Bạn đã thuộc hết nhóm này.<br><br><button class="btn" onclick="nextGroup()">Sang nhóm tiếp theo</button> <button class="btn alt" onclick="resetGroup()">Làm lại nhóm này</button></div>`;
+    return;
+  }
+  vcur = pool[Math.floor(Math.random()*pool.length)];
+  app.innerHTML = `
+    <div class="card">
+      ${selector}
+      <p class="muted">Còn ${pool.length} từ chưa thuộc trong nhóm này. Bấm vào thẻ để xem nghĩa.</p>
+      <div class="flash" onclick="flip()">
+        <div class="word">${esc(vcur.w)}</div>
+        <div style="font-size:26px;font-weight:700;color:var(--main);margin-top:6px">${esc(respell(vcur.ipa))}</div>
+        <div style="font-size:14px;color:var(--muted)">${esc(vcur.ipa || '')}</div>
+        <button class="btn alt" style="margin-top:8px" onclick="event.stopPropagation();say([{t:vcur.w}],0.8)">🔊 Phát âm</button>
+        <div id="back" hidden>
+          <div style="font-size:20px;margin-top:10px">${esc(vcur.m)}</div>
+          <div class="exp">${esc(vcur.ex)}</div>
+        </div>
+      </div>
+      <div style="margin-top:14px;text-align:center">
+        <button class="btn alt" onclick="markV(false)">Chưa thuộc</button>
+        <button class="btn" onclick="markV(true)">Đã thuộc</button>
+      </div>
+    </div>`;
+}
+function flip(){ const b = document.getElementById('back'); if (b) b.hidden = !b.hidden; }
+function markV(known){
+  const prev = S.vocab[vcur.w] || {seen:0};
+  S.vocab[vcur.w] = {known, seen: prev.seen + 1};
+  save(); vocabView();
+}
+function resetVocab(){ S.vocab = {}; save(); vocabView(); }
+
+/* =========================================================
+   ÂM THANH (đọc văn bản bằng giọng nói của trình duyệt)
+   ========================================================= */
+function say(lines, rate){
+  if (!('speechSynthesis' in window)) return;
+  speechSynthesis.cancel();
+  let i = 0;
+  const next = () => {
+    if (i >= lines.length) return;
+    const L = lines[i++];
+    const u = new SpeechSynthesisUtterance(L.t);
+    u.lang = 'en-US'; u.rate = rate;
+    u.pitch = L.v ? 1.3 : 0.9;   // hai người nói khác giọng
+    u.onend = next;
+    speechSynthesis.speak(u);
+  };
+  next();
+}
+
+/* =========================================================
+   ENGINE CÂU HỎI TRẮC NGHIỆM (dùng chung)
+   ========================================================= */
+function stopTimer(){ if (tid) clearInterval(tid); tid = null; }
+
+function startQuiz(name, qs, statKey, back, mock, minutes, again){
+  stopTimer();
+  Q = {name, qs: shuffle(qs).map(prep), i:0, c:0, wrong:[], statKey, back, mock, answered:false,
+       end: Date.now() + minutes*60000, again};
+  if (mock) tid = setInterval(() => { if (Q && Q.mock) updateTimer(); }, 1000);
+  drawQ();
+}
+
+function updateTimer(){
+  const el = document.getElementById('timer');
+  const left = Math.max(0, Q.end - Date.now());
+  if (el) el.textContent = `${Math.floor(left/60000)}:${String(Math.floor(left%60000/1000)).padStart(2,'0')}`;
+  if (left <= 0) { Q.i = Q.qs.length; finishQ(); }
+}
+
+function playQ(){ const q = Q && Q.qs[Q.i]; if (q && q.audio) say(q.audio, 0.9); }
+
+function drawQ(){
+  if (Q.i >= Q.qs.length) return finishQ();
+  const q = Q.qs[Q.i], total = Q.qs.length;
+  app.innerHTML = `
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+        <span class="muted">${esc(Q.name)}${q.part && q.part !== Q.name ? ' · ' + q.part : ''} — Câu ${Q.i+1}/${total}</span>
+        ${Q.mock ? '<span class="timer" id="timer"></span>' : ''}
+      </div>
+      <div class="bar" style="margin:8px 0 14px"><div style="width:${Q.i/total*100}%"></div></div>
+      ${q.ctx ? `<div class="exp passage">${esc(q.ctx)}</div>` : ''}
+      ${q.audio ? `<button class="btn alt" onclick="playQ()">🔊 Nghe lại</button>` : ''}
+      <div style="font-size:17px;line-height:1.6;white-space:pre-line;margin-top:6px">${esc(q.q)}</div>
+      <div>${q.o.map((t,k) => `<button class="opt" onclick="pick(${k})">${'ABCD'[k]}. ${esc(t)}</button>`).join('')}</div>
+      <div id="exp"></div><div id="nxt"></div>
+    </div>`;
+  if (Q.mock) updateTimer();
+  if (q.audio) playQ();
+}
+
+function pick(k){
+  if (Q.answered) return;
+  Q.answered = true;
+  const q = Q.qs[Q.i], ok = k === q.a;
+  if (ok) Q.c++; else Q.wrong.push(q);
+  const btns = document.querySelectorAll('.opt');
+  btns[q.a].classList.add('right');
+  if (!ok) btns[k].classList.add('wrong');
+  btns.forEach(b => b.disabled = true);
+  const ts = q.ts ? `<br><br><i>Nội dung bài nghe:</i> ${esc(q.ts)}` : '';
+  document.getElementById('exp').innerHTML = `<div class="exp"><b>${ok ? 'Chính xác!' : 'Chưa đúng.'}</b> ${esc(q.e)}${ts}</div>`;
+  document.getElementById('nxt').innerHTML = `<button class="btn" onclick="nextQ()">${Q.i+1 < Q.qs.length ? 'Câu tiếp theo' : 'Xem kết quả'}</button>`;
+}
+
+function nextQ(){ Q.i++; Q.answered = false; drawQ(); }
+
+function finishQ(){
+  stopTimer();
+  const total = Q.qs.length, pct = Math.round(Q.c/total*100);
+  S[Q.statKey].correct += Q.c; S[Q.statKey].total += total;
+  S.history.unshift({date: new Date().toLocaleString('vi-VN'), name: Q.name, score: `${Q.c}/${total}`, pct});
+  S.history = S.history.slice(0,30);
+  save();
+  const review = Q.wrong.length
+    ? `<h3>Các câu sai (${Q.wrong.length})</h3>` + Q.wrong.map(w =>
+        `<div class="exp" style="background:#fff7ed"><b>${esc(w.q)}</b><br>Đáp án đúng: ${esc(w.o[w.a])}<br>${esc(w.e)}</div>`).join('')
+    : '<p>Bạn không làm sai câu nào.</p>';
+  const msg = pct >= 85 ? 'Rất tốt, hãy giữ nhịp độ này.'
+            : pct >= 60 ? 'Khá ổn. Hãy xem lại các câu sai và phần giải thích.'
+            : 'Cần ôn thêm. Hãy đọc kỹ giải thích trước khi làm lại.';
+  app.innerHTML = `<div class="card">
+    <h2>Kết quả: ${Q.c}/${total} (${pct}%)</h2>
+    <p class="muted">${msg}</p>
+    ${review}
+    <button class="btn" onclick="Q.again()">Làm lại</button>
+    <button class="btn alt" onclick="route('${Q.back}')">Quay về</button></div>`;
+}
+
+/* =========================================================
+   CÁC CHẾ ĐỘ LUYỆN
+   ========================================================= */
+function grammarQuiz(){ startQuiz('Ngữ pháp', GRAMMAR, 'quiz', 'grammar', false, 0, grammarQuiz); }
+function readingQuiz(){ startQuiz('Đọc hiểu', READING_QS, 'reading', 'reading', false, 0, readingQuiz); }
+function listenQuiz(){ startQuiz('Nghe', LISTEN_QS, 'lq', 'listen', false, 0, listenQuiz); }
+function mockTest(){ startQuiz('Thi thử 12 câu (15 phút)', shuffle(GRAMMAR).slice(0,12), 'quiz', 'mock', true, 15, mockTest); }
+
+/* Chép chính tả */
+function dictView(){
+  lcur = DICTATION[Math.floor(Math.random()*DICTATION.length)];
+  app.innerHTML = `
+    <div class="card">
+      <h3 style="margin-top:0">Nghe và chép lại</h3>
+      <p class="muted">Bấm Nghe, gõ lại đúng câu bạn nghe được, rồi bấm Kiểm tra. Bạn có thể nghe nhiều lần.</p>
+      <button class="btn" onclick="say([{t:lcur}],0.95)">▶ Nghe</button>
+      <button class="btn alt" onclick="say([{t:lcur}],0.7)">🐢 Nghe chậm</button>
+      <textarea id="ans" placeholder="Gõ câu bạn nghe được..."></textarea>
+      <div style="margin-top:6px">
+        <button class="btn" onclick="checkD()">Kiểm tra</button>
+        <button class="btn alt" onclick="dictView()">Câu khác</button>
+      </div>
+      <div id="res"></div>
+    </div>`;
+}
+const words = s => s.toLowerCase().replace(/[^a-z0-9' ]+/g,' ').split(/\s+/).filter(Boolean);
+function checkD(){
+  const user = words(document.getElementById('ans').value), target = words(lcur);
+  const bag = {}; user.forEach(w => bag[w] = (bag[w]||0) + 1);
+  const missing = []; let hit = 0;
+  target.forEach(w => { if (bag[w] > 0) { bag[w]--; hit++; } else missing.push(w); });
+  const pct = Math.round(hit/target.length*100);
+  S.listen.done++; S.listen.score += pct; save();
+  document.getElementById('res').innerHTML = `<div class="exp"><b>Đúng khoảng ${pct}%</b><br>Câu gốc: ${esc(lcur)}<br>${missing.length ? 'Thiếu hoặc sai: ' + missing.map(esc).join(', ') : 'Chép đúng hoàn toàn!'}</div>`;
+}
+
+/* =========================================================
+   DỮ LIỆU: XUẤT / NHẬP / XÓA
+   ========================================================= */
+function exportData(){
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(S, null, 2)], {type:'application/json'}));
+  a.download = 'toeic850-tien-do.json'; a.click();
+}
+function importData(f){
+  if (!f) return;
+  const r = new FileReader();
+  r.onload = () => {
+    try { S = Object.assign(clone(DEFAULT), JSON.parse(r.result)); save(); route('home'); }
+    catch(e) { alert('File không hợp lệ.'); }
+  };
+  r.readAsText(f);
+}
+function resetData(){ if (confirm('Xóa toàn bộ tiến độ?')) { S = clone(DEFAULT); save(); route('home'); } }
+
+/* =========================================================
+   ĐIỀU HƯỚNG
+   ========================================================= */
+/* =========================================================
+   HƯỚNG DẪN TỪNG PART: chiến lược, tip, trick, bẫy, gợi ý
+   ========================================================= */
+const PARTS = [
+  {id:'p1', label:'Part 1', title:'Part 1 · Mô tả tranh', info:'6 câu · Nghe 4 mô tả (A–D), chọn mô tả đúng nhất với bức ảnh', guide:{
+    strategy:['Trước khi nghe, nhìn ảnh 5–10 giây: xác định người, vật, địa điểm và hành động chính.','Nghe hết cả 4 mô tả trước khi chọn. Câu đúng đầu tiên chưa chắc là đáp án tốt nhất.'],
+    tips:['Hành động đang diễn ra thường dùng hiện tại tiếp diễn (is/are + V-ing).','Đáp án đúng thường mô tả đúng hành động chính và đúng chủ thể.'],
+    tricks:['Loại trừ nhanh: ảnh không có người thì bỏ các câu bắt đầu bằng "A man/woman…".','Bỏ các câu chỉ nói có vật mà không có hành động, khi ảnh có người đang làm việc.'],
+    traps:['Đổi chủ thể: "A man" thay vì "A woman", hoặc "some people" khi chỉ có một người.','Sai tư thế: "is sitting" khi người đang đứng; "is reading" khi người đang viết.','Sai vị trí: "on the left/right", "behind", "in front of" không khớp với ảnh.'],
+    hints:['Tự hỏi: Ai? Đang làm gì? Ở đâu? Có gì trong ảnh?','Nếu không chắc, chọn đáp án đúng nhất với chi tiết trong ảnh, đừng chọn theo cảm giác.']}},
+  {id:'p2', label:'Part 2', title:'Part 2 · Hỏi đáp', info:'25 câu · Nghe 1 câu hỏi và 3 câu trả lời, không có chữ trên đề', guide:{
+    strategy:['Nghe từ để hỏi đầu câu (Who, What, When, Where, Why, How) để biết cần loại thông tin nào.','Với Yes/No, đáp án có thể là gián tiếp, ví dụ "I haven\'t decided yet" hoặc "Ask Tom".'],
+    tips:['Why → thường trả lời bằng Because, Due to, Since hoặc một lý do.','When → cần thời điểm. Where → cần địa điểm. How much/many → cần số lượng hoặc giá tiền.','Câu đề nghị "Would you like…?" thường trả lời bằng Sure, No thanks, hoặc một lý do.'],
+    tricks:['Loại đáp án lặp lại đúng từ trong câu hỏi, vì đây thường là bẫy.','Với câu hỏi đuôi (…, isn\'t it?), tập trung vào Yes/No và nội dung đi sau.'],
+    traps:['Từ đồng âm: meeting/meet, right/write, hour/our.','Trả lời sai loại: hỏi "What time…" nhưng đáp án là "Yes, I do".','Hỏi "Who…" nhưng đáp án chỉ địa điểm.'],
+    hints:['Đáp án đúng thường trả lời đúng loại thông tin câu hỏi yêu cầu.','Đừng chờ nghe hết câu rồi mới chọn: loại ngay những đáp án sai rõ ràng.']}},
+  {id:'p3', label:'Part 3', title:'Part 3 · Hội thoại ngắn', info:'39 câu · 13 đoạn hội thoại, mỗi đoạn 3 câu hỏi, thường có 2–3 người nói', guide:{
+    strategy:['Đọc trước câu hỏi trong thời gian chuẩn bị để biết cần nghe gì.','Trong hội thoại, xác định nhanh: ai nói, ở đâu, chủ đề là gì, vấn đề và giải pháp.'],
+    tips:['Câu hỏi thường theo thứ tự: chủ đề → chi tiết → việc sẽ làm tiếp theo.','Câu hỏi "What will the man do next?" thường trả lời ở câu nói cuối cùng.','Đáp án thường được diễn đạt lại (paraphrase), không lặp đúng từ trong bài.'],
+    tricks:['Ghi nhanh bằng ký hiệu: M (nam), W (nữ), số liệu, địa điểm, thời gian.','Câu hỏi "What does the woman mean when she says…?" hỏi ý, không hỏi nghĩa đen.'],
+    traps:['Số liệu gây nhiễu: nghe được "15" nhưng câu hỏi cần "50" (tổng hay phần).','Đáp án đúng một nửa nhưng sai chi tiết quan trọng.','Đổi ý trong hội thoại: "originally… but now…" → đáp án là thông tin mới.'],
+    hints:['Câu nói đầu tiên thường nêu vấn đề. Câu nói cuối thường nêu hành động tiếp theo.']}},
+  {id:'p4', label:'Part 4', title:'Part 4 · Bài nói ngắn', info:'30 câu · 10 bài nói, mỗi bài 3 câu hỏi: thông báo, quảng cáo, tin nhắn thoại, bài giảng', guide:{
+    strategy:['Câu đầu tiên thường nêu mục đích hoặc nơi chốn. Ghi lại thông tin đó.','Với tin nhắn thoại, thường có yêu cầu người nghe làm gì ở cuối bài.'],
+    tips:['Câu hỏi "What is the purpose…?" thường ở câu hỏi đầu tiên, và đáp án nằm ở đoạn mở đầu.','Thông tin hay được hỏi: giờ, ngày, số điện thoại, địa điểm, giá, giảm giá.'],
+    tricks:['Chú ý các cụm như "Please…", "Make sure…", "Don\'t forget…": thường là hành động người nghe cần làm, hay được hỏi.','Với thông tin thay đổi, nghe kỹ các từ "instead", "however", "unfortunately", "now".'],
+    traps:['Câu hỏi hỏi về việc sẽ xảy ra, nhưng bài nói kể về việc đã xảy ra.','Bài nói đưa ra nhiều con số: đọc kỹ đơn vị và đối tượng (giá phòng, giá vé, giá gói).','Nhầm người nói với người nghe.'],
+    hints:['Thông báo thường có ba phần: cái gì, khi nào, làm gì. Ghi nhanh ba phần này.']}},
+  {id:'p5', label:'Part 5', title:'Part 5 · Hoàn thành câu', info:'30 câu · Một chỗ trống, 4 lựa chọn. Kiểm tra ngữ pháp và từ vựng', guide:{
+    strategy:['Xác định loại từ cần điền: sau "the", "a" thường là danh từ hoặc tính từ; sau "is/are" thường là tính từ hoặc V-ing/V3; sau giới từ là danh từ hoặc V-ing.','Kiểm tra chủ vị, thì và số ít/số nhiều trước khi nhìn nghĩa.'],
+    tips:['Dấu hiệu thì: last, ago, already, yet, since, by the time, next.','Giới từ cố định: depend on, apply for, result in, according to, in charge of.','Từ vựng: nhớ cả cụm, ví dụ "take place", "in advance".'],
+    tricks:['Gạch các đáp án cùng gốc từ (sign / signature / signing / signed) để tập trung chọn đúng từ loại.','Thay đáp án vào câu rồi đọc lại, đặc biệt kiểm tra hòa hợp chủ vị.','Loại trước các đáp án sai nghĩa rõ ràng, còn lại mới so ngữ pháp.'],
+    traps:['Since (từ mốc thời gian) và for (khoảng thời gian) với thì hoàn thành.','Danh từ đếm được và không đếm được: much/many, few/little, amount/number.','Đại từ quan hệ: which (vật) và who (người).','Đáp án đúng ngữ pháp nhưng sai nghĩa, như "lend" và "borrow".'],
+    hints:['Nếu chủ ngữ là số nhiều, động từ không thêm "s".','Khi không chắc nghĩa, ưu tiên đáp án đúng ngữ pháp. Đừng dừng lại quá lâu ở một câu.']}},
+  {id:'p6', label:'Part 6', title:'Part 6 · Hoàn thành đoạn văn', info:'16 câu · 4 đoạn (email, thông báo, bài viết), mỗi đoạn 4 câu hỏi, gồm chọn từ và chèn câu', guide:{
+    strategy:['Đọc lướt toàn đoạn một lần để biết chủ đề và loại văn bản.','Sau đó điền từng chỗ trống. Một số câu cần đọc cả câu trước và sau chỗ trống.'],
+    tips:['Với câu chèn, tìm từ nối (however, therefore, in addition), đại từ thay thế (it, this, they), hoặc số liệu, tên riêng được nhắc đến.','Chú ý ngày tháng và mốc thời gian trong đoạn để chọn thì đúng.'],
+    tricks:['Đọc câu trước và sau chỗ trống; thông tin liên quan thường nằm gần đó.','Tìm từ đồng nghĩa hoặc cùng chủ đề với từ vựng trong đoạn.'],
+    traps:['Đáp án đúng ngữ pháp nhưng sai ngữ cảnh, ví dụ "fortunately" trong tin xấu.','Đáp án khớp với câu đó nhưng không khớp mạch chung của đoạn.'],
+    hints:['Đọc hết đoạn một lần trước khi chọn. Bắt đầu từ chỗ trống dễ nhất để lấy đà.']}},
+  {id:'p7', label:'Part 7', title:'Part 7 · Đọc hiểu đoạn văn', info:'54 câu · Bộ đơn (1 đoạn, 29 câu) và bộ đa đoạn (2–3 đoạn, 25 câu): thư, quảng cáo, bài báo, bảng biểu, chat', guide:{
+    strategy:['Với bộ đơn: đọc câu hỏi trước, sau đó đọc đoạn văn để tìm đúng thông tin. Hoặc đọc tiêu đề và đoạn đầu để nắm ý chính.','Với bộ đa đoạn: đọc câu hỏi, xác định đoạn nào chứa thông tin, không cần đọc kỹ từng chữ mọi đoạn.'],
+    tips:['Câu hỏi về mục đích (purpose) thường có đáp án ở đoạn đầu.','Câu hỏi "Where…" hoặc "When…": scan tìm địa điểm hoặc thời gian.','Câu hỏi NOT / EXCEPT: kiểm tra lần lượt từng đáp án với văn bản.'],
+    tricks:['Scan: dùng từ khóa (số, tên riêng, ngày) trong câu hỏi để tìm đúng vị trí trong bài.','Đáp án thường là cách nói khác của đoạn văn (paraphrase), đừng tìm đúng từ giống hệt.','Quản lý thời gian: khoảng 1 phút mỗi câu. Bỏ câu khó, đánh dấu và quay lại.'],
+    traps:['Đáp án đúng về nội dung nhưng không trả lời đúng câu hỏi.','Thông tin nằm trong bảng hoặc biểu: đối chiếu đúng cả hàng và cột.','Bộ đa đoạn: đáp án có thể rải rác ở nhiều đoạn, cần đối chiếu cẩn thận.'],
+    hints:['Gợi ý phân bổ thời gian cho phần Đọc (100 câu, 75 phút): Part 5 khoảng 15 phút, Part 6 khoảng 10 phút, Part 7 khoảng 50 phút. Đây chỉ là gợi ý.']}}
+];
+
+function partsView(){
+  const p = PARTS.find(x => x.id === vpart) || PARTS[0];
+  const tabs = PARTS.map(x => `<button class="btn ${x.id === p.id ? '' : 'alt'}" onclick="setPart('${x.id}')">${x.label}</button>`).join('');
+  const list = arr => `<ul style="line-height:1.7">${arr.map(s => `<li>${esc(s)}</li>`).join('')}</ul>`;
+  app.innerHTML = `
+    <div class="card">
+      <h2 style="margin-top:0">Cấu trúc đề TOEIC</h2>
+      <p>Đề có 200 câu, thi trong khoảng 2 giờ. Phần Nghe (Part 1–4) có 100 câu, khoảng 45 phút. Phần Đọc (Part 5–7) có 100 câu, khoảng 75 phút.</p>
+      <p class="muted">Chọn một Part để xem chiến lược, tip, trick, bẫy thường gặp và gợi ý nhanh.</p>
+      <div>${tabs}</div>
+    </div>
+    <div class="card">
+      <h3 style="margin-top:0">${esc(p.title)}</h3>
+      <p class="muted">${esc(p.info)}</p>
+      <h4>Chiến lược</h4>${list(p.guide.strategy)}
+      <h4>Tip</h4>${list(p.guide.tips)}
+      <h4>Trick</h4>${list(p.guide.tricks)}
+      <h4>Bẫy thường gặp</h4>${list(p.guide.traps)}
+      <h4>Gợi ý nhanh</h4>${list(p.guide.hints)}
+      <button class="btn" onclick="practicePart('${p.id}')">Luyện ${esc(p.label)}</button>
+    </div>`;
+}
+let vpart = 'p1';
+function setPart(id){ vpart = id; partsView(); }
+function practicePart(id){
+  const p = PARTS.find(x => x.id === id);
+  if (id === 'p5') return startQuiz('Part 5', GRAMMAR, 'quiz', 'parts', false, 0, () => practicePart('p5'));
+  if (id === 'p6' || id === 'p7') {
+    const qs = READING_QS.filter(q => q.part === p.label);
+    return startQuiz(p.label, qs, 'reading', 'parts', false, 0, () => practicePart(id));
+  }
+  const qs = LISTEN_QS.filter(q => q.part === p.label);
+  return startQuiz(p.label, qs, 'lq', 'parts', false, 0, () => practicePart(id));
+}
+
+const SECTIONS = {home:homeView, vocab:vocabView, grammar:grammarQuiz, reading:readingQuiz,
+                  listen:listenQuiz, dictation:dictView, mock:mockTest, parts:partsView, ai:chatView};
+
+/* =========================================================
+   HỎI AI: gọi trực tiếp Claude API bằng API key của người dùng
+   ========================================================= */
+const AI_KEY_STORE = 'toeic850-apikey';
+const AI_SYSTEM = 'Bạn là gia sư luyện thi TOEIC. Trả lời bằng tiếng Việt, rõ ràng và ngắn gọn. Khi giải thích câu hỏi, nêu đáp án, lý do và bẫy thường gặp. Khi dạy từ vựng, cho nghĩa, loại từ, cách đọc và một câu ví dụ tiếng Anh.';
+let chatMsgs = [];
+let chatBusy = false;
+
+function renderMsg(m){
+  const mine = m.role === 'user';
+  return `<div style="align-self:${mine ? 'flex-end' : 'flex-start'};max-width:85%;background:${mine ? '#dbeafe' : '#f1f5f9'};padding:10px 12px;border-radius:12px;white-space:pre-wrap;line-height:1.5">${esc(m.content)}</div>`;
+}
+function redrawChat(){
+  const log = document.getElementById('chatlog');
+  if (!log) return;
+  log.innerHTML = chatMsgs.map(renderMsg).join('');
+  log.scrollTop = log.scrollHeight;
+}
+function chatView(){
+  const key = localStorage.getItem(AI_KEY_STORE) || '';
+  app.innerHTML = `
+    <div class="card">
+      <h3 style="margin-top:0">Hỏi gia sư AI</h3>
+      <p class="muted">Nhập API key Anthropic của bạn. Key chỉ được lưu trong trình duyệt trên máy này và được gửi trực tiếp tới api.anthropic.com. Đừng dùng cách này trên máy dùng chung.</p>
+      <input id="apikey" type="password" placeholder="sk-ant-..." value="${esc(key)}" style="width:100%;padding:10px;border-radius:8px;border:1px solid #cbd5e1">
+      <div style="margin-top:6px">
+        <button class="btn alt" onclick="saveKey()">Lưu key</button>
+        <button class="btn alt" onclick="clearKey()">Xóa key</button>
+      </div>
+      <select id="model" style="margin-top:8px;padding:8px;border-radius:8px">
+        <option value="claude-haiku-5-5">Haiku 5.5 (nhanh, tiết kiệm)</option>
+        <option value="claude-sonnet-5-5">Sonnet 5.5 (giải thích kỹ hơn)</option>
+      </select>
+    </div>
+    <div class="card">
+      <div id="chatlog" style="max-height:420px;overflow:auto;display:flex;flex-direction:column;gap:10px;margin-bottom:12px">
+        ${chatMsgs.length ? chatMsgs.map(renderMsg).join('') : '<p class="muted">Hỏi bất kỳ điều gì về TOEIC: giải thích đáp án, nghĩa và cách dùng từ, cách làm bài...</p>'}
+      </div>
+      <textarea id="chatin" placeholder="Nhập câu hỏi..." style="min-height:70px"></textarea>
+      <button class="btn" id="sendbtn" onclick="sendChat()" ${chatBusy ? 'disabled' : ''}>Gửi</button>
+      <button class="btn alt" onclick="chatMsgs=[];chatView()">Xóa hội thoại</button>
+    </div>`;
+}
+function saveKey(){
+  const k = document.getElementById('apikey').value.trim();
+  if (!k) { alert('Hãy nhập API key.'); return; }
+  localStorage.setItem(AI_KEY_STORE, k);
+  chatView();
+}
+function clearKey(){ localStorage.removeItem(AI_KEY_STORE); chatView(); }
+
+async function sendChat(){
+  if (chatBusy) return;
+  const input = document.getElementById('chatin');
+  const text = input.value.trim();
+  const key = localStorage.getItem(AI_KEY_STORE);
+  if (!text) return;
+  if (!key) { alert('Hãy nhập và lưu API key trước.'); return; }
+
+  const model = document.getElementById('model').value;
+  chatMsgs.push({role:'user', content:text});
+  const pending = {role:'assistant', content:'Đang trả lời...'};
+  chatMsgs.push(pending);
+  input.value = '';
+  chatBusy = true;
+  chatView();
+
+  // Chỉ gửi 12 tin gần nhất, bắt đầu bằng tin của người dùng
+  let hist = chatMsgs.filter(m => m !== pending).slice(-12);
+  while (hist.length && hist[0].role !== 'user') hist = hist.slice(1);
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-api-key': key,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({model, max_tokens: 1024, system: AI_SYSTEM,
+                            messages: hist.map(m => ({role: m.role, content: m.content}))})
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error((data.error && data.error.message) || ('HTTP ' + res.status));
+    pending.content = data.content.filter(c => c.type === 'text').map(c => c.text).join('\n') || '(Không có nội dung)';
+  } catch (e) {
+    pending.content = 'Lỗi: ' + e.message + '\nKiểm tra lại API key và kết nối mạng.';
+  }
+  chatBusy = false;
+  if (document.getElementById('chatlog')) chatView();
+}
+const LABELS = {home:'Trang chủ', vocab:'Từ vựng', grammar:'Part 5', reading:'Part 6-7',
+                listen:'Part 1-4', dictation:'Chép chính tả', mock:'Thi thử', parts:'Hướng dẫn Part', ai:'Hỏi AI'};
+function route(id){
+  currentRoute = id;
+  stopTimer(); Q = null;
+  if (window.speechSynthesis) speechSynthesis.cancel();
+  SECTIONS[id]();
+  document.getElementById('nav').innerHTML = Object.keys(LABELS).map(k =>
+    `<button class="${k===id?'active':''}" onclick="route('${k}')">${LABELS[k]}</button>`).join('');
+  window.scrollTo(0,0);
+}
+/* =========================================================
+   NGÔN NGỮ GIAO DIỆN: Tiếng Việt / English
+   Nội dung câu hỏi (tiếng Anh), nghĩa từ vựng và phần giải thích/hướng dẫn vẫn giữ tiếng Việt.
+   ========================================================= */
+let LANG = localStorage.getItem('toeic850-lang') || 'vi';
+let currentRoute = 'home';
+const UI_EN = {
+  'Trang chủ':'Home', 'Từ vựng':'Vocabulary', 'Part 5':'Part 5', 'Part 6-7':'Part 6-7', 'Part 1-4':'Part 1-4',
+  'Chép chính tả':'Dictation', 'Thi thử':'Mock test', 'Hướng dẫn Part':'Part guide', 'Hỏi AI':'Ask AI',
+  'Các con số dưới đây là kết quả luyện tập cá nhân, không phải điểm thi chính thức.':'These numbers are your personal practice results, not official scores.',
+  'Từ vựng đã thuộc':'Words mastered', 'Tiến độ từ vựng':'Vocabulary progress',
+  'Gợi ý học mỗi ngày (khoảng 60 phút)':'Daily plan (about 60 minutes)',
+  '20 phút từ vựng.':'20 min vocabulary.', '15 phút Part 5 hoặc Part 6-7.':'15 min Part 5 or Part 6-7.',
+  '15 phút Part 1-4 (nghe).':'15 min Part 1-4 (listening).', '10 phút chép chính tả.':'10 min dictation.',
+  'Cuối tuần: một bài "Thi thử" và xem lại các câu sai.':'Weekend: one mock test and review the wrong answers.',
+  'Lịch sử gần đây':'Recent history', 'Chưa có bài nào.':'No attempts yet.', 'Dữ liệu':'Data',
+  'Tiến độ được lưu trong trình duyệt này. Hãy xuất file định kỳ để lưu trữ hoặc chuyển sang máy khác.':'Progress is saved in this browser. Export a file regularly to back it up or move to another computer.',
+  'Xuất dữ liệu':'Export data', 'Nhập dữ liệu':'Import data', 'Xóa tiến độ':'Reset progress',
+  'Chưa thuộc':'Not yet', 'Đã thuộc':'Got it', '🔊 Phát âm':'🔊 Pronounce',
+  '🎉 Bạn đã thuộc hết nhóm này.':'🎉 You know every word in this group.',
+  'Sang nhóm tiếp theo':'Next group', 'Làm lại nhóm này':'Redo this group',
+  'Nghe lại':'Replay', '🔊 Nghe lại':'🔊 Replay', 'Chính xác!':'Correct!', 'Chưa đúng.':'Incorrect.',
+  'Câu tiếp theo':'Next question', 'Xem kết quả':'See results',
+  'Rất tốt, hãy giữ nhịp độ này.':'Excellent, keep up this pace.',
+  'Khá ổn. Hãy xem lại các câu sai và phần giải thích.':'Good. Review the wrong answers and explanations.',
+  'Cần ôn thêm. Hãy đọc kỹ giải thích trước khi làm lại.':'More practice needed. Read the explanations carefully before retrying.',
+  'Làm lại':'Retry', 'Quay về':'Back', 'Đáp án đúng:':'Correct answer:', 'Bạn không làm sai câu nào.':'No wrong answers.',
+  'Nội dung bài nghe:':'Transcript:', 'Ngữ pháp':'Grammar', 'Đọc hiểu':'Reading', 'Nghe':'Listening',
+  'Thi thử 12 câu (15 phút)':'Mock test: 12 questions (15 min)',
+  'Nghe và chép lại':'Listen and write',
+  'Bấm Nghe, gõ lại đúng câu bạn nghe được, rồi bấm Kiểm tra. Bạn có thể nghe nhiều lần.':'Press Listen, type the sentence you hear, then press Check. You can listen as many times as you like.',
+  '▶ Nghe':'▶ Listen', '🐢 Nghe chậm':'🐢 Slow', 'Kiểm tra':'Check', 'Câu khác':'Another', 'Câu gốc:':'Original:',
+  'Thiếu hoặc sai:':'Missing or wrong:', 'Chép đúng hoàn toàn!':'Perfect!',
+  'Cấu trúc đề TOEIC':'TOEIC test format',
+  'Đề có 200 câu, thi trong khoảng 2 giờ. Phần Nghe (Part 1–4) có 100 câu, khoảng 45 phút. Phần Đọc (Part 5–7) có 100 câu, khoảng 75 phút.':'The test has 200 questions in about 2 hours. Listening (Parts 1–4): 100 questions, about 45 minutes. Reading (Parts 5–7): 100 questions, about 75 minutes.',
+  'Chọn một Part để xem chiến lược, tip, trick, bẫy thường gặp và gợi ý nhanh.':'Choose a Part to see its strategy, tips, tricks, common traps and quick hints.',
+  'Chiến lược':'Strategy', 'Tip':'Tips', 'Trick':'Tricks', 'Bẫy thường gặp':'Common traps', 'Gợi ý nhanh':'Quick hints',
+  'Hỏi gia sư AI':'Ask the AI tutor',
+  'Nhập API key Anthropic của bạn. Key chỉ được lưu trong trình duyệt trên máy này và được gửi trực tiếp tới api.anthropic.com. Đừng dùng cách này trên máy dùng chung.':'Enter your Anthropic API key. The key is stored only in this browser and sent directly to api.anthropic.com. Do not use this on a shared computer.',
+  'Lưu key':'Save key', 'Xóa key':'Delete key', 'Gửi':'Send', 'Xóa hội thoại':'Clear chat',
+  'Haiku 5.5 (nhanh, tiết kiệm)':'Haiku 5.5 (fast, low cost)', 'Sonnet 5.5 (giải thích kỹ hơn)':'Sonnet 5.5 (more detailed)',
+  'Hỏi bất kỳ điều gì về TOEIC: giải thích đáp án, nghĩa và cách dùng từ, cách làm bài...':'Ask anything about TOEIC: answer explanations, word meanings and usage, test strategy...',
+  'Đang trả lời...':'Thinking...',
+  'Nhập câu hỏi...':'Type your question...', 'Gõ câu bạn nghe được...':'Type the sentence you heard...'
+};
+const TOPIC_EN = {
+  'Công việc chung':'General business', 'Tài chính - kế toán':'Finance & accounting', 'Marketing - bán hàng':'Marketing & sales',
+  'Nhân sự - tuyển dụng':'HR & recruiting', 'Du lịch - đi lại':'Travel', 'Khách sạn - nhà hàng':'Hotels & restaurants',
+  'Sản xuất - kho vận':'Manufacturing & logistics', 'Công nghệ - văn phòng':'Technology & office',
+  'Hợp đồng - pháp lý - bảo hiểm':'Contracts, legal & insurance', 'Mua sắm - khách hàng - bất động sản':'Shopping, customers & real estate',
+  'Từ mẫu':'Sample words'
+};
+const POS_EN = {'danh từ':'noun','động từ':'verb','tính từ':'adjective','trạng từ':'adverb','giới từ':'preposition','cụm từ':'phrase'};
+const UI_PATTERNS = [
+  [/Mục tiêu: (\d+) điểm/g, 'Goal: $1 points'],
+  [/Part 5 \((\d+) câu\)/g, 'Part 5 ($1 Qs)'], [/Part 6-7 \((\d+) câu\)/g, 'Part 6-7 ($1 Qs)'],
+  [/Part 1-4 \((\d+) câu\)/g, 'Part 1-4 ($1 Qs)'], [/Chép chính tả \((\d+) câu\)/g, 'Dictation ($1 Qs)'],
+  [/Còn (\d+) từ chưa thuộc trong nhóm này\. Bấm vào thẻ để xem nghĩa\./g, 'Still $1 words to learn in this group. Tap the card to see the meaning.'],
+  [/Câu (\d+)\/(\d+)/g, 'Question $1/$2'],
+  [/Kết quả: (\d+)\/(\d+) \((\d+)%\)/g, 'Result: $1/$2 ($3%)'],
+  [/Các câu sai \((\d+)\)/g, 'Wrong answers ($1)'],
+  [/Thi thử (\d+) câu/g, 'Mock test: $1 questions'],
+  [/Đúng khoảng (\d+)%/g, 'About $1% correct'],
+  [/Luyện (Part \d)/g, 'Practice $1'],
+  [/Đọc hiểu/g, 'Reading'], [/Ngữ pháp/g, 'Grammar'],
+  [/^(.+?) · Nhóm (\d+) \((\d+\/\d+)\)$/g, (m, t, n, c) => `${TOPIC_EN[t] || t} · Group ${n} (${c})`],
+  [/^(danh từ|động từ|tính từ|trạng từ|giới từ|cụm từ) · (.+)$/g, (m, p, t) => `${POS_EN[p]} · ${TOPIC_EN[t] || t}`]
+];
+function tr(s){
+  if (LANG !== 'en') return s;
+  const k = s.trim();
+  if (!k) return s;
+  if (UI_EN[k]) return s.replace(k, UI_EN[k]);
+  let out = k;
+  UI_PATTERNS.forEach(([re, rep]) => { out = out.replace(re, rep); });
+  return out === k ? s : s.replace(k, out);
+}
+function translateTree(root){
+  if (!root || LANG !== 'en') return;
+  const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  const nodes = [];
+  while (w.nextNode()) nodes.push(w.currentNode);
+  nodes.forEach(n => { const t = tr(n.nodeValue); if (t !== n.nodeValue) n.nodeValue = t; });
+  root.querySelectorAll('[placeholder]').forEach(el => {
+    const p = UI_EN[el.getAttribute('placeholder')];
+    if (p) el.setAttribute('placeholder', p);
+  });
+}
+const langObserver = new MutationObserver(() => {
+  langObserver.disconnect();
+  translateTree(document.getElementById('app'));
+  translateTree(document.getElementById('nav'));
+  langObserver.takeRecords();
+  langObserver.observe(document.body, {childList:true, subtree:true, characterData:true});
+});
+function applyLangUI(){
+  document.documentElement.lang = LANG === 'en' ? 'en' : 'vi';
+  document.getElementById('langbtn').textContent = LANG === 'en' ? 'VI' : 'EN';
+}
+function toggleLang(){
+  LANG = LANG === 'en' ? 'vi' : 'en';
+  localStorage.setItem('toeic850-lang', LANG);
+  applyLangUI();
+  route(currentRoute);
+}
+
+applyLangUI();
+langObserver.observe(document.body, {childList:true, subtree:true, characterData:true});
+route('home');
+</script>
+</body>
+</html>
