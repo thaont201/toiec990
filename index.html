@@ -34,6 +34,8 @@ main{max-width:860px;margin:20px auto;padding:0 16px}
 textarea{width:100%;min-height:110px;padding:10px;border-radius:8px;border:1px solid #cbd5e1;font-size:15px;font-family:inherit;margin-top:10px}
 .timer{font-size:20px;font-weight:700;color:var(--bad)}
 .muted{color:var(--muted)}
+.opt.sel{border-color:var(--main);background:#eff6ff}
+details summary{cursor:pointer;font-weight:600;margin-bottom:8px}
 .tag{display:inline-block;background:#e2e8f0;border-radius:6px;padding:2px 8px;font-size:13px;color:var(--muted)}
 .bar{height:10px;background:#e2e8f0;border-radius:6px;overflow:hidden}
 .bar div{height:100%;background:var(--main);transition:width .3s}
@@ -355,8 +357,8 @@ const DICTATION = [
 ];
 
 /* Danh sách câu hỏi đã làm phẳng để dùng cho engine */
-const READING_QS = READING_SETS.flatMap(s => s.qs.map(x => ({...x, part:s.part, ctx:s.ctx})));
-const LISTEN_QS = LISTEN_SETS.flatMap(s => s.qs.map(x => ({...x, part:s.part, ctx:s.ctx, audio:s.audio,
+const READING_QS = READING_SETS.flatMap((s, si) => s.qs.map(x => ({...x, part:s.part, ctx:s.ctx, setId:'R' + si})));
+const LISTEN_QS = LISTEN_SETS.flatMap((s, si) => s.qs.map(x => ({...x, part:s.part, ctx:s.ctx, audio:s.audio, setId:'N' + si,
   ts:s.audio.map(a => a.t).join(' '), noshuf:!!s.noshuf})));
 
 /* =========================================================
@@ -411,13 +413,61 @@ async function loadQuestions(){
 
 /* Mã khóa ổn định cho từng câu, để lưu thống kê */
 const hash = s => { let h = 5381; for (let i = 0; i < s.length; i++) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0; return h.toString(36); };
-const qkey = q => q.uid || 'l' + hash([q.q, q.ctx || '', (q.o || []).join('|'), q.a].join('|'));
+const qkey = q => q.uid || 'l' + hash([q.q, Array.isArray(q.ctx) ? JSON.stringify(q.ctx) : (q.ctx || ''), (q.o || []).join('|'), q.a].join('|'));
+
+/* ---- Chuẩn hóa câu hỏi: mọi nguồn (file, Supabase, đề thi) đều qua hàm này ----
+   Nhãn dạng câu (qtype) theo Part:
+   P1: người, vật, địa điểm, hành động, trạng thái
+   P2: wh, yes/no, câu hỏi đuôi, đề nghị, khác
+   P3–4: chủ đề, chi tiết, suy luận, ý định, đồ họa
+   P5: thì, từ loại, giới từ, liên từ, đại từ, so sánh, mệnh đề, rút gọn, đảo ngữ, từ vựng
+   P6: điền từ, câu chèn
+   P7: ý chính, chi tiết, suy luận, từ vựng, NOT/EXCEPT, tham chiếu, nhiều đoạn
+   Nhãn Part 2 được suy ra tự động từ nội dung nếu chưa gắn tay. */
+const IMG_RE = /^images\/[A-Za-z0-9_\-\/]+\.(png|jpe?g|webp|gif)$/;
+function autoType(partNo, text){
+  if (partNo !== 2) return '';
+  const t = String(text || '').trim();
+  if (/^(where|when|who|what|why|how|which|whose)\b/i.test(t)) return 'wh';
+  if (/^(would you like|why don'?t|why not|how about|let'?s|shall)\b/i.test(t)) return 'đề nghị';
+  if (/,\s*(isn'?t|aren'?t|don'?t|doesn'?t|didn'?t|won'?t|can'?t|wasn'?t|weren'?t|haven'?t|hasn'?t|is|are|do|did|will|would)\s+(it|he|she|they|we|you|there|that|I)\?$/i.test(t)) return 'câu hỏi đuôi';
+  if (/^(do|does|did|is|are|was|were|will|would|can|could|have|has|should)\b/i.test(t)) return 'yes/no';
+  return 'khác';
+}
+function normQ(x){
+  const partNo = Number(x.partNo) || Number(String(x.part || '').replace(/\D/g, '')) || 5;
+  const ctx = Array.isArray(x.ctx)
+    ? x.ctx.filter(p => p && typeof p.text === 'string').slice(0, 5)
+        .map(p => ({title: String(p.title || '').slice(0, 80), text: String(p.text)}))
+    : (x.ctx ? String(x.ctx) : null);
+  const probe = x.ts || (x.audio && x.audio[0] && x.audio[0].t) || x.q;
+  return {...x, partNo, part: 'Part ' + partNo, ctx,
+          image: (typeof x.image === 'string' && IMG_RE.test(x.image)) ? x.image : null,
+          qtype: String(x.qtype || autoType(partNo, probe) || '').slice(0, 30),
+          level: [1, 2, 3].includes(x.level) ? x.level : 2};
+}
+
+/* Bộ câu: các câu cùng đoạn văn hoặc cùng bài nghe */
+function setKey(q){
+  if (q.setId) return q.setId;
+  if (q.ctx) return 'c' + hash(Array.isArray(q.ctx) ? JSON.stringify(q.ctx) : q.ctx);
+  if (q.ts) return 't' + hash(q.ts);
+  return '';
+}
+const groupKey = q => setKey(q) || qkey(q);
+function groupSets(qs){
+  const m = new Map();
+  qs.forEach(q => { const k = groupKey(q); if (!m.has(k)) m.set(k, []); m.get(k).push(q); });
+  return [...m.values()];
+}
+/* Xáo thứ tự các bộ nhưng giữ nguyên thứ tự câu trong mỗi bộ */
+function orderSets(qs){ return shuffle(groupSets(qs)).flat(); }
 
 /* Toàn bộ câu hỏi của một Part: có sẵn trong file + từ Supabase */
 function poolFor(n){
   const label = 'Part ' + n;
   const local = n === 5 ? GRAMMAR : n <= 4 ? LISTEN_QS.filter(q => q.part === label) : READING_QS.filter(q => q.part === label);
-  return [...local, ...DB_QS.filter(q => q.partNo === n)].map(q => ({...q, partNo: n}));
+  return [...local, ...DB_QS.filter(q => q.partNo === n)].map(q => normQ({...q, partNo: n}));
 }
 
 /* Logic ôn tập: câu chưa làm và câu hay sai lên trước; câu đã đúng liên tiếp xuống cuối */
@@ -431,11 +481,15 @@ function prioritise(qs){
   return qs.map(q => ({q, w: score(q)})).sort((a, b) => b.w - a.w).map(x => x.q);
 }
 
+/* Ghi kết quả một câu và cập nhật lịch lặp của câu đó (dùng cùng thuật toán với từ vựng) */
 function recordAnswer(q, ok){
   const k = q.key || qkey(q);
-  const st = S.qstats[k] || (S.qstats[k] = {seen:0, wrong:0, streak:0, p:q.partNo || 0});
+  const st = S.qstats[k] || (S.qstats[k] = {seen:0, wrong:0, streak:0, p:q.partNo || 0, t:'', box:0, due:0});
   st.seen++;
   if (ok) st.streak++; else { st.wrong++; st.streak = 0; }
+  const g = gradeEntry(st, ok ? 'good' : 'again', Date.now());
+  st.box = g.box; st.due = g.due;
+  if (q.qtype) st.t = q.qtype;
   save();
 }
 
@@ -455,12 +509,14 @@ function practicePart(id){
   startQuiz(p.label, session, statKey, 'parts', false, 0, () => practicePart(id));
 }
 
+/* Ôn câu sai theo lịch: chỉ lấy câu đã sai và đã đến hạn, quá hạn lâu nhất lên trước */
 function practiceWrong(){
+  const now = Date.now();
   const all = [1,2,3,4,5,6,7].flatMap(poolFor);
-  const st = q => S.qstats[qkey(q)] || {wrong:0, streak:0};
-  const due = all.filter(q => st(q).wrong > 0 && st(q).streak < 2)
-                 .sort((a, b) => st(b).wrong - st(a).wrong).slice(0, 20);
-  if (!due.length) return alert('Chưa có câu nào cần ôn lại.');
+  const st = q => S.qstats[qkey(q)];
+  const due = all.filter(q => st(q) && st(q).wrong > 0 && (st(q).due || 0) <= now)
+                 .sort((a, b) => (st(a).due || 0) - (st(b).due || 0)).slice(0, 20);
+  if (!due.length) return alert('Chưa có câu nào đến hạn ôn lại.');
   startQuiz('Ôn câu đã sai', due, null, 'parts', false, 0, practiceWrong);
 }
 
@@ -469,8 +525,8 @@ function practiceWrong(){
    ========================================================= */
 const KEY = 'toeic850-data';
 const DEFAULT = {target:850, quiz:{correct:0,total:0}, reading:{correct:0,total:0}, lq:{correct:0,total:0},
-                 listen:{done:0,score:0}, vocab:{}, custom:[], settings:{accent:'US', lock:true}, daily:{d:'', n:0}, streak:{last:'', count:0},
-                 history:[], qstats:{}};
+                 listen:{done:0,score:0}, vocab:{}, custom:[], settings:{accent:'US', lock:true, realListen:true}, daily:{d:'', n:0}, streak:{last:'', count:0},
+                 history:[], mocks:[], qstats:{}};
 const clone = o => JSON.parse(JSON.stringify(o));
 /* Chỉ giữ lại dữ liệu đúng kiểu, vì dữ liệu localStorage hoặc file nhập vào không đáng tin tuyệt đối */
 function sanitize(raw){
@@ -496,17 +552,24 @@ function sanitize(raw){
       .map(c => ({w: c.w.trim(), m: c.m.trim().slice(0, 200), ipa: String(c.ipa || '').slice(0, 80),
                   ex: String(c.ex || '').slice(0, 300), topic: 'Của tôi', pos: ''}));
   out.settings = {accent: raw.settings && raw.settings.accent === 'UK' ? 'UK' : 'US',
-                  lock: !(raw.settings && raw.settings.lock === false)};
+                  lock: !(raw.settings && raw.settings.lock === false),
+                  realListen: !(raw.settings && raw.settings.realListen === false)};
   if (raw.daily && typeof raw.daily.d === 'string') out.daily = {d: raw.daily.d.slice(0, 10), n: num(raw.daily.n)};
   if (raw.streak && typeof raw.streak.last === 'string') out.streak = {last: raw.streak.last.slice(0, 10), count: num(raw.streak.count)};
   if (Array.isArray(raw.history))
     out.history = raw.history.slice(0, 30).filter(h => h && typeof h === 'object')
       .map(h => ({date: String(h.date || '').slice(0, 40), name: String(h.name || '').slice(0, 80),
                   score: String(h.score || '').slice(0, 20), pct: num(h.pct)}));
+  if (Array.isArray(raw.mocks))
+    out.mocks = raw.mocks.slice(0, 20).filter(m => m && typeof m === 'object').map(m => ({
+      date: String(m.date || '').slice(0, 40), L: num(m.L), LT: num(m.LT), R: num(m.R), RT: num(m.RT),
+      Ls: num(m.Ls), Rs: num(m.Rs), tot: num(m.tot)}));
   if (raw.qstats && typeof raw.qstats === 'object' && !Array.isArray(raw.qstats))
     out.qstats = Object.fromEntries(Object.entries(raw.qstats).slice(0, 5000)
       .filter(([k, v]) => k.length <= 40 && v && typeof v === 'object')
-      .map(([k, v]) => [k, {seen: num(v.seen), wrong: num(v.wrong), streak: num(v.streak), p: num(v.p)}]));
+      .map(([k, v]) => [k, {seen: num(v.seen), wrong: num(v.wrong), streak: num(v.streak), p: num(v.p),
+                            box: Math.min(5, num(v.box)), due: (Number.isFinite(v.due) && v.due >= 0 && v.due < 4e12) ? v.due : 0,
+                            t: typeof v.t === 'string' ? v.t.slice(0, 30) : ''}]));
   return out;
 }
 function load(){ try { return sanitize(JSON.parse(localStorage.getItem(KEY))); } catch(e) { return clone(DEFAULT); } }
@@ -835,10 +898,14 @@ function say(lines, rate){
    ========================================================= */
 function stopTimer(){ if (tid) clearInterval(tid); tid = null; }
 
-function startQuiz(name, qs, statKey, back, mock, minutes, again){
+/* Tùy chọn: keepSets (giữ các câu cùng bộ đi liền nhau), keepOrder (giữ nguyên thứ tự),
+   strict (chế độ thi thật cho nghe), allowBack (được quay lại câu trước), onDone (chuyển sang phần kế tiếp) */
+function startQuiz(name, qs, statKey, back, mock, minutes, again, o = {}){
   stopTimer();
-  Q = {name, qs: shuffle(qs).map(prep), i:0, c:0, wrong:[], statKey, back, mock, answered:false,
-       end: Date.now() + minutes*60000, again};
+  const list = o.keepOrder ? qs : o.keepSets ? orderSets(qs) : shuffle(qs);
+  Q = {name, qs: list.map(x => prep(normQ(x))), i:0, c:0, wrong:[], statKey, back, mock, answered:false,
+       end: Date.now() + minutes*60000, again, strict: !!o.strict, allowBack: !!o.allowBack,
+       onDone: o.onDone || null, sel: {}, played: {}};
   if (mock) tid = setInterval(() => { if (Q && Q.mock) updateTimer(); }, 1000);
   drawQ();
 }
@@ -850,11 +917,39 @@ function updateTimer(){
   if (left <= 0) { Q.i = Q.qs.length; finishQ(); }
 }
 
-function playQ(){ const q = Q && Q.qs[Q.i]; if (q && q.audio) say(q.audio, 0.9); }
+/* Part 1–2 ở chế độ thi thật: đáp án chỉ có tiếng, không in chữ */
+function hidesOptions(q){ return !!Q.strict && (q.partNo === 1 || q.partNo === 2); }
+/* Part 2 ở chế độ thi thật: đọc cả các đáp án A, B, C trong bài nghe */
+function listenAudioFor(q){
+  if (!q.audio) return null;
+  if (Q.strict && q.partNo === 2 && q.o.length) return [...q.audio, ...q.o.map((o, k) => ({t: 'ABCD'[k] + '. ' + o}))];
+  return q.audio;
+}
+function playQ(){ const q = Q && Q.qs[Q.i]; const lines = q && listenAudioFor(q); if (lines) say(lines, 0.9); }
+
+/* Đoạn văn: một đoạn hoặc nhiều đoạn có tiêu đề; câu đầu của bộ mở sẵn, các câu sau thu gọn */
+function passageHTML(ctx, open){
+  const body = Array.isArray(ctx)
+    ? ctx.map((p, i) => `<div style="margin-bottom:10px"><b>${esc(p.title || 'Đoạn ' + (i + 1))}</b><div class="exp passage">${esc(p.text)}</div></div>`).join('')
+    : `<div class="exp passage">${esc(ctx)}</div>`;
+  return `<details ${open ? 'open' : ''} style="margin-bottom:10px"><summary>Đoạn văn</summary>${body}</details>`;
+}
 
 function drawQ(){
   if (Q.i >= Q.qs.length) return finishQ();
   const q = Q.qs[Q.i], total = Q.qs.length;
+  const prev = Q.i > 0 ? Q.qs[Q.i - 1] : null;
+  const sameSet = !!prev && groupKey(prev) === groupKey(q);
+  const hide = hidesOptions(q);
+  const sel = Q.mock ? Q.sel[Q.i] : undefined;
+  const showPassage = q.ctx && !(q.partNo === 1 && q.image);
+  const opts = q.o.map((t, k) => {
+    const label = hide ? 'ABCD'[k] : 'ABCD'[k] + '. ' + t;
+    return `<button class="opt${sel === k ? ' sel' : ''}" onclick="pick(${k})">${esc(label)}</button>`;
+  }).join('');
+  const nav = Q.mock
+    ? `${Q.allowBack && Q.i > 0 ? '<button class="btn alt" onclick="prevQ()">← Câu trước</button> ' : ''}<button class="btn" onclick="nextQ()">${Q.i + 1 < total ? 'Câu tiếp theo' : 'Xem kết quả'}</button> <button class="btn alt" onclick="submitQ()">Nộp bài</button>`
+    : '<div id="nxt"></div>';
   app.innerHTML = `
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
@@ -862,23 +957,29 @@ function drawQ(){
         ${Q.mock ? '<span class="timer" id="timer"></span>' : ''}
       </div>
       <div class="bar" style="margin:8px 0 14px"><div style="width:${Q.i/total*100}%"></div></div>
-      ${q.ctx ? `<div class="exp passage">${esc(q.ctx)}</div>` : ''}
-      ${q.audio ? `<button class="btn alt" onclick="playQ()">🔊 Nghe lại</button>` : ''}
+      ${showPassage ? passageHTML(q.ctx, !sameSet) : ''}
+      ${q.image ? `<img src="${esc(q.image)}" alt="" style="max-width:100%;border-radius:10px;margin-bottom:10px">` : ''}
+      ${q.audio && !Q.strict ? `<button class="btn alt" onclick="playQ()">🔊 Nghe lại</button>` : ''}
       <div style="font-size:17px;line-height:1.6;white-space:pre-line;margin-top:6px">${esc(q.q)}</div>
-      <div>${q.o.map((t,k) => `<button class="opt" onclick="pick(${k})">${'ABCD'[k]}. ${esc(t)}</button>`).join('')}</div>
-      <div id="exp"></div><div id="nxt"></div>
+      <div>${opts}</div>
+      <div id="exp"></div>${nav}
     </div>`;
   if (Q.mock) updateTimer();
-  if (q.audio) playQ();
+  if (q.audio && !Q.played[Q.i]) {
+    Q.played[Q.i] = true;
+    if (!(Q.strict && sameSet)) playQ();   // bài nghe dùng chung chỉ phát một lần
+  }
 }
 
 function pick(k){
+  if (Q.mock) { Q.sel[Q.i] = k; return drawQ(); }   // thi thử: không hiện đáp án khi đang làm
   if (Q.answered) return;
   Q.answered = true;
   const q = Q.qs[Q.i], ok = k === q.a;
   if (ok) Q.c++; else Q.wrong.push(q);
   recordAnswer(q, ok);
   const btns = document.querySelectorAll('.opt');
+  if (hidesOptions(q)) btns.forEach((b, i) => { b.textContent = 'ABCD'[i] + '. ' + q.o[i]; });
   btns[q.a].classList.add('right');
   if (!ok) btns[k].classList.add('wrong');
   btns.forEach(b => b.disabled = true);
@@ -888,14 +989,35 @@ function pick(k){
 }
 
 function nextQ(){ Q.i++; Q.answered = false; drawQ(); }
+function prevQ(){ if (Q.i > 0) { Q.i--; drawQ(); } }
+function submitQ(){ if (confirm('Nộp bài và kết thúc phần này?')) finishQ(); }
 
+/* Kết thúc bài: thi thử chấm điểm lúc này (câu chưa làm tính là sai nhưng không ghi vào lịch lặp) */
+let NEXT_STAGE = () => {};
 function finishQ(){
   stopTimer();
-  const total = Q.qs.length, pct = Math.round(Q.c/total*100);
+  if (Q.mock) {
+    Q.c = 0; Q.wrong = [];
+    Q.qs.forEach((q, i) => {
+      const answered = Q.sel[i] !== undefined;
+      const ok = answered && Q.sel[i] === q.a;
+      if (ok) Q.c++; else Q.wrong.push(q);
+      if (answered) recordAnswer(q, ok);
+    });
+  }
+  const total = Q.qs.length, pct = total ? Math.round(Q.c/total*100) : 0;
   if (Q.statKey) { S[Q.statKey].correct += Q.c; S[Q.statKey].total += total; }
   S.history.unshift({date: new Date().toLocaleString('vi-VN'), name: Q.name, score: `${Q.c}/${total}`, pct});
   S.history = S.history.slice(0,30);
   save();
+  if (Q.onDone) {
+    const cb = Q.onDone, payload = {c: Q.c, total, wrong: Q.wrong};
+    NEXT_STAGE = () => cb(payload);
+    app.innerHTML = `<div class="card"><h2>${esc(Q.name)} xong</h2>
+      <p>${Q.c}/${total} câu đúng (${pct}%)</p>
+      <button class="btn" onclick="NEXT_STAGE()">Tiếp tục</button></div>`;
+    return;
+  }
   const review = Q.wrong.length
     ? `<h3>Các câu sai (${Q.wrong.length})</h3>` + Q.wrong.map(w =>
         `<div class="exp" style="background:#fff7ed"><b>${esc(w.q)}</b><br>Đáp án đúng: ${esc(w.o[w.a])}<br>${esc(w.e)}</div>`).join('')
@@ -915,9 +1037,104 @@ function finishQ(){
    CÁC CHẾ ĐỘ LUYỆN
    ========================================================= */
 function grammarQuiz(){ startQuiz('Ngữ pháp', GRAMMAR, 'quiz', 'grammar', false, 0, grammarQuiz); }
-function readingQuiz(){ startQuiz('Đọc hiểu', READING_QS, 'reading', 'reading', false, 0, readingQuiz); }
-function listenQuiz(){ startQuiz('Nghe', LISTEN_QS, 'lq', 'listen', false, 0, listenQuiz); }
+function readingQuiz(){ startQuiz('Đọc hiểu', READING_QS, 'reading', 'reading', false, 0, readingQuiz, {keepSets: true}); }
+function listenQuiz(){
+  startQuiz('Nghe', [1,2,3,4].flatMap(poolFor), 'lq', 'listen', false, 0, listenQuiz,
+            {keepSets: true, strict: realListen()});
+}
+function listenView(){
+  app.innerHTML = `<div class="card"><b>Part 1–4 · Nghe</b>
+    <p class="muted">Chế độ thi thật: Part 1–2 chỉ có đáp án bằng tiếng, bài nghe phát một lần, không có nút nghe lại.</p>
+    <label><input type="checkbox" ${realListen() ? 'checked' : ''} onchange="toggleRealListen(this.checked)"> Chế độ thi thật</label>
+    <p><button class="btn" onclick="listenQuiz()">Bắt đầu</button></p></div>`;
+}
+function realListen(){ return S.settings.realListen !== false; }
+function toggleRealListen(on){ S.settings.realListen = !!on; save(); listenView(); }
 function mockTest(){ startQuiz('Thi thử 12 câu (15 phút)', shuffle(GRAMMAR).slice(0,12), 'quiz', 'mock', true, 15, mockTest); }
+
+/* ---- Thi đầy đủ: Nghe 45 phút rồi Đọc 75 phút, đề theo số câu chuẩn ---- */
+const TEST_PLAN = {1:6, 2:25, 3:39, 4:30, 5:30, 6:16, 7:54};
+function pickFor(n){
+  const target = TEST_PLAN[n];
+  const groups = shuffle(groupSets(poolFor(n)));
+  const chosen = [];
+  let count = 0;
+  for (const g of groups) { if (count >= target) break; chosen.push(g); count += g.length; }
+  const out = chosen.flat();
+  const trimmable = chosen.every(g => g.length === 1);
+  return trimmable && out.length > target ? out.slice(0, target) : out;   // bộ câu nhiều câu giữ nguyên, không cắt
+}
+function fullTestPlan(){
+  const parts = {};
+  [1,2,3,4,5,6,7].forEach(n => { parts[n] = pickFor(n); });
+  const short = [1,2,3,4,5,6,7].filter(n => parts[n].length < TEST_PLAN[n]).map(n => ({n, have: parts[n].length, want: TEST_PLAN[n]}));
+  return {listen: [1,2,3,4].flatMap(n => parts[n]), reading: [5,6,7].flatMap(n => parts[n]), short};
+}
+function fullTestView(){
+  const plan = fullTestPlan();
+  const note = plan.short.length
+    ? `<p style="color:#b45309">Ngân hàng chưa đủ câu: ${plan.short.map(x => `Part ${x.n} còn ${x.have}/${x.want}`).join('; ')}. Đề sẽ ngắn hơn đề chuẩn.</p>` : '';
+  app.innerHTML = `<div class="card"><h2>Thi thử đầy đủ</h2>
+    <p>Gồm hai phần: Nghe (Part 1–4, 45 phút) và Đọc (Part 5–7, 75 phút). Phần nghe phát một lần và không quay lại câu trước. Phần đọc được quay lại câu trước. Đáp án chỉ hiện ở cuối mỗi phần.</p>
+    <p class="muted">Số câu: Nghe ${plan.listen.length}, Đọc ${plan.reading.length}.</p>
+    ${note}
+    <button class="btn" onclick="startFullTest()">Bắt đầu thi</button></div>`;
+}
+function startFullTest(){
+  const plan = fullTestPlan();
+  const res = {};
+  const reading = () => startQuiz('Phần Đọc (Part 5–7)', plan.reading, 'reading', 'fulltest', true, 75, startFullTest,
+    {keepOrder: true, allowBack: true, onDone: r => { res.R = r; fullResultView(res); }});
+  startQuiz('Phần Nghe (Part 1–4)', plan.listen, 'lq', 'fulltest', true, 45, startFullTest,
+    {keepOrder: true, strict: true, onDone: r => { res.L = r; reading(); }});
+}
+/* Điểm ước lượng tuyến tính theo tỷ lệ đúng: mỗi phần 5–495, tổng 10–990. Không phải bảng quy đổi chính thức. */
+const scaleScore = (c, t) => t ? Math.round(5 + 490 * c / t) : 5;
+function fullResultView(res){
+  const L = res.L, R = res.R;
+  const Ls = scaleScore(L.c, L.total), Rs = scaleScore(R.c, R.total), tot = Ls + Rs;
+  S.mocks = [{date: new Date().toLocaleString('vi-VN'), L: L.c, LT: L.total, R: R.c, RT: R.total, Ls, Rs, tot}, ...S.mocks].slice(0, 20);
+  save();
+  app.innerHTML = `<div class="card"><h2>Kết quả thi thử</h2>
+    <p>Nghe: ${L.c}/${L.total} câu đúng (ước lượng ${Ls}/495)</p>
+    <p>Đọc: ${R.c}/${R.total} câu đúng (ước lượng ${Rs}/495)</p>
+    <p><b>Tổng ước lượng: ${tot}/990</b></p>
+    <p class="muted">Đây là điểm ước lượng theo tỷ lệ đúng, không phải điểm thi thật và không phải bảng quy đổi chính thức.</p>
+    <button class="btn" onclick="startFullTest()">Thi lại</button>
+    <button class="btn alt" onclick="route('home')">Về trang chủ</button></div>`;
+}
+
+/* ---- Phân tích: theo Part và theo dạng câu, cùng danh sách câu đến hạn ôn ---- */
+function analysisView(){
+  const now = Date.now();
+  const byPart = {}, byType = {};
+  Object.values(S.qstats).forEach(s => {
+    const p = s.p || 0;
+    byPart[p] = byPart[p] || {seen:0, wrong:0};
+    byPart[p].seen += s.seen; byPart[p].wrong += s.wrong;
+    if (s.t) {
+      const k = p + '|' + s.t;
+      byType[k] = byType[k] || {p, t: s.t, seen:0, wrong:0};
+      byType[k].seen += s.seen; byType[k].wrong += s.wrong;
+    }
+  });
+  const acc = x => x.seen ? Math.round((x.seen - x.wrong) / x.seen * 100) + '%' : '—';
+  const accNum = x => x.seen ? (x.seen - x.wrong) / x.seen : 1;
+  const dueN = Object.values(S.qstats).filter(s => s.wrong > 0 && (s.due || 0) <= now).length;
+  const partRows = Object.entries(byPart).filter(([p]) => p !== '0').sort((a, b) => a[0] - b[0])
+    .map(([p, x]) => `<tr><td>Part ${p}</td><td>${x.seen}</td><td>${acc(x)}</td></tr>`).join('');
+  const typeRows = Object.values(byType).sort((a, b) => accNum(a) - accNum(b))
+    .map(x => `<tr><td>Part ${x.p} · ${esc(x.t)}</td><td>${x.seen}</td><td>${acc(x)}</td></tr>`).join('');
+  const table = (head, rows) => rows
+    ? `<table style="width:100%;border-collapse:collapse"><tr>${head.map(h => `<th style="text-align:left;padding:6px;border-bottom:1px solid #e2e8f0">${h}</th>`).join('')}</tr>${rows}</table>`
+    : '<p class="muted">Chưa có dữ liệu.</p>';
+  app.innerHTML = `<div class="card"><b>Phân tích</b>
+    <p class="muted">Tỷ lệ đúng tính trên mọi lượt làm câu hỏi đã ghi nhận.</p>
+    <h3>Theo Part</h3>${table(['Part', 'Lượt làm', 'Tỷ lệ đúng'], partRows)}
+    <h3>Theo dạng câu (yếu nhất trước)</h3>${table(['Dạng câu', 'Lượt làm', 'Tỷ lệ đúng'], typeRows)}
+    <p style="margin-top:12px">Câu sai đang đến hạn ôn: <b>${dueN}</b></p>
+    <button class="btn" onclick="practiceWrong()">Ôn câu đến hạn</button></div>`;
+}
 
 /* Chép chính tả */
 function dictView(){
@@ -1048,7 +1265,7 @@ let vpart = 'p1';
 function setPart(id){ vpart = id; partsView(); }
 
 const SECTIONS = {home:homeView, vocab:vocabView, grammar:grammarQuiz, reading:readingQuiz,
-                  listen:listenQuiz, dictation:dictView, mock:mockTest, parts:partsView, ai:chatView};
+                  listen:listenView, dictation:dictView, mock:mockTest, fulltest:fullTestView, analysis:analysisView, parts:partsView, ai:chatView};
 
 /* =========================================================
    HỎI AI: gọi trực tiếp Claude API bằng API key của người dùng
@@ -1143,7 +1360,7 @@ async function sendChat(){
   if (document.getElementById('chatlog')) chatView();
 }
 const LABELS = {home:'Trang chủ', vocab:'Từ vựng', grammar:'Part 5', reading:'Part 6-7',
-                listen:'Part 1-4', dictation:'Chép chính tả', mock:'Thi thử', parts:'Hướng dẫn Part', ai:'Hỏi AI'};
+                listen:'Part 1-4', dictation:'Chép chính tả', mock:'Thi thử', fulltest:'Thi đầy đủ', analysis:'Phân tích', parts:'Hướng dẫn Part', ai:'Hỏi AI'};
 function route(id){
   currentRoute = id;
   stopTimer(); Q = null;
@@ -1204,7 +1421,10 @@ const UI_EN = {
   'Chưa có câu ví dụ cho từ này.':'No example sentence yet.', 'Thêm từ của tôi':'Add my word',
   'Từ mới sẽ vào nhóm "Của tôi" và được lặp lại theo lịch như các từ khác.':'New words go into the "My words" group and repeat on the same schedule.',
   'Thêm từ':'Add word', 'Quay lại':'Back', 'Đã hết thẻ đến hạn trong nhóm này.':'No cards due in this group right now.',
-  'Hiện không có từ nào cần ôn.':'No words due for review.', 'Thẻ tiếp theo đến hạn:':'Next card due:'
+  'Hiện không có từ nào cần ôn.':'No words due for review.', 'Thẻ tiếp theo đến hạn:':'Next card due:',
+  'Thi thử đầy đủ':'Full mock test', 'Thi đầy đủ':'Full test', 'Phân tích':'Analysis',
+  'Đoạn văn':'Passage', 'Bắt đầu thi':'Start test', 'Tiếp tục':'Continue', 'Nộp bài':'Submit', '← Câu trước':'← Previous',
+  'Chế độ thi thật':'Real exam mode', 'Bắt đầu':'Start', 'Thi lại':'Retake', 'Về trang chủ':'Home'
 };
 const TOPIC_EN = {
   'Công việc chung':'General business', 'Tài chính - kế toán':'Finance & accounting', 'Marketing - bán hàng':'Marketing & sales',
