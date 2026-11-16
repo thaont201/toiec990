@@ -7,47 +7,123 @@
 <meta name="referrer" content="no-referrer">
 <title>TOEIC 850 - Luyện thi cá nhân</title>
 <style>
-:root{--main:#2563eb;--ok:#16a34a;--bad:#dc2626;--bg:#f1f5f9;--card:#fff;--text:#0f172a;--muted:#64748b}
+:root{--ink:#141A3C;--indigo:#3340C4;--indigo-d:#242E96;--indigo-l:#E9EBFB;--hi:#FFD23F;--mint:#0FA678;--coral:#E5484D;
+  --bg:#F3F5FB;--card:#fff;--mist:#E4E8F5;--text:#141A3C;--muted:#5E6591;
+  --main:var(--indigo);--ok:var(--mint);--bad:var(--coral);--r:18px;--rail:236px}
 *{box-sizing:border-box}
-body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--text)}
-header{background:var(--main);color:#fff;padding:14px 20px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px}
-header h1{font-size:20px;margin:0}
-nav{display:flex;flex-wrap:wrap;gap:6px}
-nav button{background:rgba(255,255,255,.15);color:#fff;border:0;padding:8px 12px;border-radius:8px;cursor:pointer}
-nav button.active{background:#fff;color:var(--main);font-weight:600}
-main{max-width:860px;margin:20px auto;padding:0 16px}
-.card{background:var(--card);border-radius:14px;padding:22px;box-shadow:0 2px 8px rgba(0,0,0,.06);margin-bottom:16px}
-.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
-.stat{background:#f8fafc;border-radius:12px;padding:16px;text-align:center}
-.stat b{display:block;font-size:26px;color:var(--main)}
+[hidden]{display:none!important}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;font:16px/1.55 "Avenir Next","Segoe UI Variable Text","Segoe UI",system-ui,-apple-system,Roboto,sans-serif;background:var(--bg);color:var(--text);padding-bottom:86px}
+h1,h2,h3{font-family:"Avenir Next","Segoe UI Variable Display","Trebuchet MS",system-ui,sans-serif;letter-spacing:-.02em;line-height:1.2;color:var(--ink)}
+h2{font-size:clamp(22px,4.6vw,30px);margin:0 0 8px;font-weight:800;text-wrap:balance}
+h3{font-size:18px;margin:18px 0 8px;font-weight:700}
+:focus-visible{outline:3px solid #8E98F0;outline-offset:2px;border-radius:8px}
+.shell{display:block}
+.col{min-width:0}
+.logo{font-weight:800;font-size:20px;letter-spacing:-.03em;color:var(--ink);display:flex;align-items:center;gap:6px}
+.logo b{background:var(--hi);padding:0 7px;border-radius:7px;color:var(--ink)}
+.top{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:10px;padding:10px 16px;background:rgba(243,245,251,.94);backdrop-filter:blur(8px);border-bottom:1px solid var(--mist)}
+.top .sp{flex:1}
+.chip{display:inline-flex;align-items:center;gap:6px;background:var(--card);border:1px solid var(--mist);border-radius:99px;padding:5px 12px;font-size:14px;font-weight:600;color:var(--ink)}
+.chip.hi{background:var(--hi);border-color:var(--hi)}
+#langbtn{background:var(--card);color:var(--ink);border:1px solid var(--mist);padding:5px 12px;border-radius:99px;font-weight:700;cursor:pointer;font-size:14px}
+#rail{position:fixed;left:0;right:0;bottom:0;z-index:40;background:var(--card);border-radius:22px 22px 0 0;padding:18px 18px 28px;max-height:78vh;overflow:auto;transform:translateY(105%);transition:transform .22s ease;box-shadow:0 -12px 40px rgba(20,26,60,.18)}
+#rail .logo{display:none}
+body.menu #rail{transform:none}
+#scrim{position:fixed;inset:0;background:rgba(20,26,60,.4);z-index:30;display:none}
+body.menu #scrim{display:block}
+nav .grp{font-size:13px;color:var(--muted);font-weight:600;margin:14px 10px 4px}
+nav button{display:flex;align-items:center;gap:10px;width:100%;text-align:left;background:none;color:var(--ink);border:0;padding:10px 12px;border-radius:12px;cursor:pointer;font-size:15px;font-weight:500;font-family:inherit}
+nav button .ic{width:22px;text-align:center}
+nav button:hover{background:var(--indigo-l)}
+nav button.active{background:var(--indigo);color:#fff;font-weight:700}
+#tabs{position:fixed;left:0;right:0;bottom:0;z-index:25;display:flex;background:var(--card);border-top:1px solid var(--mist);padding:6px 6px calc(6px + env(safe-area-inset-bottom))}
+#tabs button{flex:1;background:none;border:0;padding:6px 2px;border-radius:12px;color:var(--muted);font-size:12px;font-weight:600;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px;font-family:inherit}
+#tabs button .ic{font-size:20px;line-height:1.2}
+#tabs button.active{color:var(--indigo);background:var(--indigo-l)}
+main{max-width:780px;margin:18px auto;padding:0 16px}
+.card{background:var(--card);border:1px solid var(--mist);border-radius:var(--r);padding:22px;margin-bottom:14px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px}
+.stat{background:var(--bg);border-radius:14px;padding:14px;text-align:left}
+.stat b{display:block;font-size:26px;color:var(--ink);font-variant-numeric:tabular-nums;letter-spacing:-.02em}
 .stat span{color:var(--muted);font-size:13px}
-.btn{background:var(--main);color:#fff;border:0;padding:10px 16px;border-radius:8px;cursor:pointer;font-size:15px;margin:4px 4px 4px 0;display:inline-block}
-.btn.alt{background:#e2e8f0;color:var(--text)}
+.btn{background:var(--indigo);color:#fff;border:0;padding:11px 18px;min-height:44px;border-radius:12px;cursor:pointer;font-size:15px;font-weight:600;margin:4px 6px 4px 0;display:inline-flex;align-items:center;justify-content:center;font-family:inherit;transition:background .15s}
+.btn:hover{background:var(--indigo-d)}
+.btn.alt{background:var(--indigo-l);color:var(--indigo-d)}
+.btn.alt:hover{background:#DADEF8}
 .btn:disabled{opacity:.5;cursor:not-allowed}
-.opt{display:block;width:100%;text-align:left;background:#f8fafc;border:2px solid #e2e8f0;border-radius:10px;padding:12px;margin:8px 0;cursor:pointer;font-size:15px;color:var(--text)}
-.opt.right{border-color:var(--ok);background:#dcfce7}
-.opt.wrong{border-color:var(--bad);background:#fee2e2}
-.flash{min-height:180px;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;cursor:pointer;border:2px dashed #cbd5e1;border-radius:12px;padding:20px;user-select:none}
-.flash .word{font-size:30px;font-weight:700}
-.exp{background:#eff6ff;border-radius:10px;padding:12px;margin-top:10px;line-height:1.5}
-.passage{background:#f8fafc;white-space:pre-line;line-height:1.6;margin:0 0 14px}
-textarea{width:100%;min-height:110px;padding:10px;border-radius:8px;border:1px solid #cbd5e1;font-size:15px;font-family:inherit;margin-top:10px}
-.timer{font-size:20px;font-weight:700;color:var(--bad)}
+.opt{display:block;width:100%;text-align:left;background:var(--card);border:2px solid var(--mist);border-radius:14px;padding:14px 16px;margin:10px 0;cursor:pointer;font-size:16px;color:var(--text);font-family:inherit;transition:border-color .12s,background .12s;position:relative}
+.opt:hover:not(:disabled){border-color:var(--indigo);background:var(--indigo-l)}
+.opt.sel{border-color:var(--indigo);background:var(--indigo-l);font-weight:600}
+.opt.right{border-color:var(--mint);background:#E3F7F0;font-weight:600}
+.opt.right::after{content:"\2713";position:absolute;right:16px;color:var(--mint);font-weight:800}
+.opt.wrong{border-color:var(--coral);background:#FDECEC}
+.opt.wrong::after{content:"\2715";position:absolute;right:16px;color:var(--coral);font-weight:800}
+.flash{min-height:270px;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;cursor:pointer;border:2px solid var(--mist);background:var(--card);border-radius:22px;padding:24px;user-select:none}
+.flash:hover{border-color:#B9C0F2}
+.flash .word{font-size:clamp(34px,9vw,48px);font-weight:800;letter-spacing:-.03em;color:var(--ink);line-height:1.1}
+#back:not([hidden]){animation:rise .22s ease}
+@keyframes rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.exp{background:var(--indigo-l);border-radius:12px;padding:12px 14px;margin-top:10px;line-height:1.6;text-align:left}
+.passage{background:var(--bg);white-space:pre-line;line-height:1.7;margin:0 0 14px}
+textarea{width:100%;min-height:110px;padding:12px;border-radius:12px;border:2px solid var(--mist);font-size:16px;font-family:inherit;margin-top:10px}
+textarea:focus{border-color:var(--indigo);outline:none}
+select{font-family:inherit;border:2px solid var(--mist);background:var(--card);color:var(--ink);border-radius:12px}
+.timer{font-size:18px;font-weight:800;color:var(--ink);background:var(--hi);padding:3px 12px;border-radius:99px;font-variant-numeric:tabular-nums}
 .muted{color:var(--muted)}
-.opt.sel{border-color:var(--main);background:#eff6ff}
 details summary{cursor:pointer;font-weight:600;margin-bottom:8px}
-.tag{display:inline-block;background:#e2e8f0;border-radius:6px;padding:2px 8px;font-size:13px;color:var(--muted)}
-.bar{height:10px;background:#e2e8f0;border-radius:6px;overflow:hidden}
-.bar div{height:100%;background:var(--main);transition:width .3s}
+.tag{display:inline-block;background:var(--indigo-l);border-radius:99px;padding:2px 10px;font-size:13px;color:var(--indigo-d);font-weight:600}
+.bar{height:8px;background:var(--mist);border-radius:99px;overflow:hidden}
+.bar div{height:100%;background:var(--indigo);border-radius:99px;transition:width .3s}
+table{border-collapse:collapse}
+th{font-size:13px;color:var(--muted);font-weight:600;padding:6px 8px 6px 0;text-align:left}
+td{padding:8px 8px 8px 0;border-top:1px solid var(--mist);font-variant-numeric:tabular-nums}
+/* Trang chủ: thước điểm */
+.hero{padding:24px 22px 26px}
+.ruler{position:relative;height:14px;background:var(--mist);border-radius:99px;margin:44px 6px 34px}
+.ruler .fill{position:absolute;left:0;top:0;bottom:0;border-radius:99px;background:var(--indigo);width:0;animation:grow .9s .15s cubic-bezier(.2,.8,.2,1) forwards}
+.ruler .goal{position:absolute;top:-6px;width:4px;height:26px;background:var(--hi);border-radius:2px;box-shadow:0 0 0 3px var(--card)}
+.ruler .goal span,.ruler .now span{position:absolute;bottom:32px;left:50%;transform:translateX(-50%);white-space:nowrap;font-size:13px;font-weight:700;color:var(--ink)}
+.ruler .now{position:absolute;top:-5px;width:24px;height:24px;margin-left:-12px;border-radius:50%;background:var(--card);border:6px solid var(--indigo);opacity:0;animation:pop .3s 1s ease forwards}
+.ruler .now span{bottom:30px}
+.ruler .ends{position:absolute;top:22px;left:0;right:0;display:flex;justify-content:space-between;font-size:12px;color:var(--muted)}
+@keyframes grow{to{width:var(--w)}}
+@keyframes pop{to{opacity:1}}
+.task{display:flex;align-items:center;gap:12px;padding:12px 0;border-top:1px solid var(--mist)}
+.task:first-of-type{border-top:0}
+.task .t{flex:1;min-width:0}
+.task .t b{display:block}
+.task .t span{color:var(--muted);font-size:14px}
+.task .btn{margin:0;flex:none}
+.ring{--p:0;--c:var(--indigo);width:124px;height:124px;border-radius:50%;background:conic-gradient(var(--c) calc(var(--p)*1%),var(--mist) 0);display:grid;place-items:center;position:relative;margin:4px 0 12px}
+.ring::before{content:"";position:absolute;inset:11px;background:var(--card);border-radius:50%}
+.ring b{position:relative;font-size:30px;font-weight:800;color:var(--ink);letter-spacing:-.03em}
+@media (min-width:960px){
+  body{padding-bottom:0}
+  .shell{display:grid;grid-template-columns:var(--rail) 1fr}
+  #rail{position:sticky;top:0;height:100vh;transform:none;border-radius:0;box-shadow:none;border-right:1px solid var(--mist);max-height:none;padding:22px 14px;transition:none;z-index:10}
+  #rail .logo{display:flex;margin:0 10px 8px}
+  #tabs,#scrim,.top .logo,.top .menu{display:none!important}
+  main{margin:28px auto}
+}
+@media (prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;animation-delay:0s!important;transition:none!important}.ruler .now{opacity:1}.ruler .fill{width:var(--w)}}
 </style>
 </head>
 <body>
-<header>
-  <h1>🎯 TOEIC 850</h1>
-  <button id="langbtn" onclick="toggleLang()" style="background:#fff;color:var(--main);border:0;padding:8px 12px;border-radius:8px;font-weight:700;cursor:pointer"></button>
-  <nav id="nav"></nav>
-</header>
-<main id="app"></main>
+<div class="shell">
+  <aside id="rail"><div class="logo">TOEIC<b>850</b></div><nav id="nav"></nav></aside>
+  <div class="col">
+    <header class="top">
+      <div class="logo">TOEIC<b>850</b></div>
+      <span class="sp"></span>
+      <span class="chip" id="streak" hidden></span>
+      <button id="langbtn" onclick="toggleLang()"></button>
+    </header>
+    <main id="app"></main>
+  </div>
+</div>
+<div id="scrim" onclick="toggleMenu(false)"></div>
+<div id="tabs"></div>
 
 <script src="vocab.js"></script>
 <script>
@@ -701,15 +777,45 @@ const prep = q => {
 /* =========================================================
    TRANG CHỦ
    ========================================================= */
+function dueWrongCount(){
+  const now = Date.now(), st = q => S.qstats[qkey(q)];
+  return [1,2,3,4,5,6,7].flatMap(poolFor).filter(q => st(q) && st(q).wrong > 0 && (st(q).due || 0) <= now).length;
+}
 function homeView(){
   const known = Object.values(S.vocab).filter(isKnown).length;
   const pct = (c,t) => t ? Math.round(c/t*100) : 0;
   const hist = S.history.slice(0,8).map(h => `<li>${esc(h.date)} — ${esc(h.name)}: ${esc(h.score)} (${h.pct}%)</li>`).join('');
+  const last = S.mocks[0], MAXS = 990;
+  const tw = Math.min(100, S.target / MAXS * 100);
+  const nw = last ? Math.min(100, last.tot / MAXS * 100) : 0;
+  const head = !last ? `Mục tiêu ${S.target} điểm`
+    : last.tot >= S.target ? `Bài thi thử gần nhất đã đạt mục tiêu ${S.target}`
+    : `Còn ${S.target - last.tot} điểm đến mục tiêu ${S.target}`;
+  const sub = last ? `Điểm ước lượng từ bài thi thử gần nhất: ${last.tot}. Đây không phải điểm thi chính thức.`
+                   : 'Làm một bài thi đầy đủ để đặt mốc đầu tiên. Điểm chỉ là ước lượng, không phải điểm thi chính thức.';
+  const due = reviewCount(), wrongDue = dueWrongCount(), todayN = (S.daily && S.daily.d === todayStr()) ? S.daily.n : 0;
   app.innerHTML = `
     ${VOCAB_MISSING ? '<div class="card" style="background:#fef9c3">Thiếu file vocab.js cùng thư mục với index.html, nên hiện chỉ có 28 từ mẫu.</div>' : ''}
+    <div class="card hero">
+      <h2>${head}</h2>
+      <p class="muted" style="margin:0">${sub}</p>
+      <div class="ruler" role="img" aria-label="Thước điểm từ 0 đến ${MAXS}">
+        <div class="fill" style="--w:${nw}%"></div>
+        <div class="goal" style="left:${tw}%"><span>Mục tiêu ${S.target}</span></div>
+        ${last ? `<div class="now" style="left:${nw}%"><span>${last.tot}</span></div>` : ''}
+        <div class="ends"><span>10</span><span>${MAXS}</span></div>
+      </div>
+      <button class="btn" onclick="route('fulltest')">${last ? 'Thi đầy đủ lần nữa' : 'Thi đầy đủ'}</button>
+      <button class="btn alt" onclick="route('analysis')">Xem phần yếu</button>
+    </div>
     <div class="card">
-      <h2 style="margin:0 0 6px">Mục tiêu: ${S.target} điểm</h2>
-      <p class="muted" style="margin:0 0 14px">Các con số dưới đây là kết quả luyện tập cá nhân, không phải điểm thi chính thức.</p>
+      <h3 style="margin-top:0">Hôm nay</h3>
+      <div class="task"><div class="t"><b>Ôn từ vựng</b><span>${due} thẻ đến hạn · hôm nay đã ôn ${todayN}</span></div><button class="btn" onclick="route('vocab')">Ôn từ</button></div>
+      <div class="task"><div class="t"><b>Ôn câu đã sai</b><span>${wrongDue ? wrongDue + ' câu đến hạn' : 'Chưa có câu nào đến hạn'}</span></div><button class="btn ${wrongDue ? '' : 'alt'}" onclick="practiceWrong()">Ôn câu sai</button></div>
+      <div class="task"><div class="t"><b>Nghe Part 1-4</b><span>Luyện nghe theo định dạng đề thật</span></div><button class="btn alt" onclick="route('listen')">Vào luyện nghe</button></div>
+      <div class="task"><div class="t"><b>Part 5 và Part 6-7</b><span>Ngữ pháp, đọc hiểu</span></div><button class="btn alt" onclick="route('grammar')">Làm Part 5</button></div>
+    </div>
+    <div class="card">
       <div class="stats">
         <div class="stat"><b>${known}/${VOCAB.length}</b><span>Từ vựng đã thuộc</span></div>
         <div class="stat"><b>${currentStreak()}</b><span>Ngày học liên tiếp</span></div>
@@ -718,24 +824,24 @@ function homeView(){
         <div class="stat"><b>${pct(S.lq.correct,S.lq.total)}%</b><span>Part 1-4 (${S.lq.total} câu)</span></div>
         <div class="stat"><b>${S.listen.done ? Math.round(S.listen.score/S.listen.done) : 0}%</b><span>Chép chính tả (${S.listen.done} câu)</span></div>
       </div>
+      <div class="bar" style="margin-top:14px"><div style="width:${known/VOCAB.length*100}%"></div></div>
+      <p class="muted" style="margin:6px 0 0;font-size:14px">Tiến độ từ vựng</p>
     </div>
-    <div class="card"><b>Tiến độ từ vựng</b>
-      <div class="bar" style="margin-top:8px"><div style="width:${known/VOCAB.length*100}%"></div></div></div>
-    <div class="card"><b>Gợi ý học mỗi ngày (khoảng 60 phút)</b>
+    <div class="card"><b>Lịch sử gần đây</b>
+      ${S.history.length ? `<ul style="line-height:1.8">${hist}</ul>` : '<p class="muted">Chưa có bài nào.</p>'}</div>
+    <div class="card"><details><summary>Gợi ý lịch học mỗi ngày (khoảng 60 phút)</summary>
       <ul style="line-height:1.8">
         <li>20 phút từ vựng.</li>
         <li>15 phút Part 5 hoặc Part 6-7.</li>
         <li>15 phút Part 1-4 (nghe).</li>
         <li>10 phút chép chính tả.</li>
         <li>Cuối tuần: một bài "Thi thử" và xem lại các câu sai.</li>
-      </ul></div>
-    <div class="card"><b>Lịch sử gần đây</b>
-      ${S.history.length ? `<ul style="line-height:1.8">${hist}</ul>` : '<p class="muted">Chưa có bài nào.</p>'}</div>
-    <div class="card"><b>Dữ liệu</b>
+      </ul></details></div>
+    <div class="card"><details><summary>Dữ liệu và sao lưu</summary>
       <p class="muted">Tiến độ được lưu trong trình duyệt này. Hãy xuất file định kỳ để lưu trữ hoặc chuyển sang máy khác.</p>
       <button class="btn alt" onclick="exportData()">Xuất dữ liệu</button>
       <label class="btn alt">Nhập dữ liệu<input type="file" accept="application/json" hidden onchange="importData(this.files[0])"></label>
-      <button class="btn alt" onclick="resetData()">Xóa tiến độ</button></div>`;
+      <button class="btn alt" onclick="resetData()">Xóa tiến độ</button></details></div>`;
 }
 
 /* =========================================================
@@ -1153,6 +1259,7 @@ function finishQ(){
             : pct >= 60 ? 'Khá ổn. Hãy xem lại các câu sai và phần giải thích.'
             : 'Cần ôn thêm. Hãy đọc kỹ giải thích trước khi làm lại.';
   app.innerHTML = `<div class="card">
+    <div class="ring" style="--p:${pct};--c:${pct >= 85 ? 'var(--mint)' : pct >= 60 ? 'var(--indigo)' : 'var(--coral)'}"><b>${pct}%</b></div>
     <h2>Kết quả: ${Q.c}/${total} (${pct}%)</h2>
     <p class="muted">${msg}</p>
     ${review}
@@ -1598,13 +1705,35 @@ async function sendChat(){
 }
 const LABELS = {home:'Trang chủ', vocab:'Từ vựng', grammar:'Part 5', reading:'Part 6-7',
                 listen:'Part 1-4', dictation:'Chép chính tả', mock:'Thi thử', fulltest:'Thi đầy đủ', analysis:'Phân tích', content:'Nội dung', parts:'Hướng dẫn Part', ai:'Hỏi AI'};
+const NAV_GROUPS = [
+  ['', [['home', '🏠']]],
+  ['Học', [['vocab', '📖'], ['grammar', '✏️'], ['reading', '📄'], ['listen', '🎧'], ['dictation', '⌨️']]],
+  ['Thi', [['mock', '⏱️'], ['fulltest', '📝']]],
+  ['Theo dõi', [['analysis', '📊'], ['content', '🗂️']]],
+  ['Hỗ trợ', [['parts', '🧭'], ['ai', '💬']]]
+];
+const TAB_IDS = [['home', '🏠'], ['vocab', '📖'], ['listen', '🎧'], ['grammar', '✏️']];
+function toggleMenu(on){
+  const cl = document.body.classList; if (!cl) return;
+  if (on === undefined) cl.toggle('menu'); else if (on) cl.add('menu'); else cl.remove('menu');
+}
+function renderNav(id){
+  document.getElementById('nav').innerHTML = NAV_GROUPS.map(([g, items]) =>
+    (g ? `<div class="grp">${g}</div>` : '') +
+    items.map(([k, ic]) => `<button class="${k===id?'active':''}" onclick="route('${k}')"><span class="ic" aria-hidden="true">${ic}</span>${LABELS[k]}</button>`).join('')).join('');
+  document.getElementById('tabs').innerHTML = TAB_IDS.map(([k, ic]) =>
+    `<button class="${k===id?'active':''}" onclick="route('${k}')"><span class="ic" aria-hidden="true">${ic}</span>${LABELS[k]}</button>`).join('') +
+    `<button class="${TAB_IDS.some(t => t[0] === id) ? '' : 'active'}" onclick="toggleMenu()"><span class="ic" aria-hidden="true">☰</span>Menu</button>`;
+  const st = document.getElementById('streak'), n = currentStreak();
+  if (st) { st.hidden = !n; st.className = 'chip hi'; st.textContent = '🔥 ' + n + ' ngày liên tiếp'; }
+}
 function route(id){
   currentRoute = id;
   stopTimer(); Q = null;
   if (window.speechSynthesis) speechSynthesis.cancel();
+  toggleMenu(false);
   SECTIONS[id]();
-  document.getElementById('nav').innerHTML = Object.keys(LABELS).map(k =>
-    `<button class="${k===id?'active':''}" onclick="route('${k}')">${LABELS[k]}</button>`).join('');
+  renderNav(id);
   window.scrollTo(0,0);
 }
 /* =========================================================
@@ -1615,7 +1744,7 @@ let LANG = localStorage.getItem('toeic850-lang') || 'vi';
 let currentRoute = 'home';
 const UI_EN = {
   'Trang chủ':'Home', 'Từ vựng':'Vocabulary', 'Part 5':'Part 5', 'Part 6-7':'Part 6-7', 'Part 1-4':'Part 1-4',
-  'Chép chính tả':'Dictation', 'Nội dung':'Content', 'Thi thử':'Mock test', 'Hướng dẫn Part':'Part guide', 'Hỏi AI':'Ask AI',
+  'Chép chính tả':'Dictation', 'Nội dung':'Content', 'Học':'Learn', 'Thi':'Test', 'Theo dõi':'Track', 'Hỗ trợ':'Help', 'Thi thử':'Mock test', 'Hướng dẫn Part':'Part guide', 'Hỏi AI':'Ask AI',
   'Các con số dưới đây là kết quả luyện tập cá nhân, không phải điểm thi chính thức.':'These numbers are your personal practice results, not official scores.',
   'Từ vựng đã thuộc':'Words mastered', 'Tiến độ từ vựng':'Vocabulary progress',
   'Gợi ý học mỗi ngày (khoảng 60 phút)':'Daily plan (about 60 minutes)',
@@ -1710,6 +1839,7 @@ const langObserver = new MutationObserver(() => {
   langObserver.disconnect();
   translateTree(document.getElementById('app'));
   translateTree(document.getElementById('nav'));
+  translateTree(document.getElementById('tabs'));
   langObserver.takeRecords();
   langObserver.observe(document.body, {childList:true, subtree:true, characterData:true});
 });

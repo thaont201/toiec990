@@ -130,7 +130,7 @@ check('từ tự thêm không hợp lệ bị bỏ, cài đặt mặc định đ
   const s = run(`sanitize({custom:[{w:'ok word', m:'được'}, {w:'bad<script>', m:'x'}, {w:'fine', m:''}]})`);
   assert.strictEqual(s.custom.length, 1);
   assert.strictEqual(s.custom[0].topic, 'Của tôi');
-  assert.strictEqual(JSON.stringify(s.settings), JSON.stringify({accent: 'US', lock: true}));
+  assert.strictEqual(JSON.stringify(s.settings), JSON.stringify({accent: 'US', lock: true, realListen: true}));
 });
 
 // --- 5. Bài kiểm tra nhóm ---
