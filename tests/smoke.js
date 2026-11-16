@@ -15,6 +15,6 @@ for (const r of ['home','vocab','grammar','reading','listen','dictation','mock',
   try { vm.runInContext(`route('${r}')`,ctx); const h=g('app').innerHTML; if(!h||/undefined|NaN/.test(h.replace(/<option[^>]*>/g,''))) {bad++; console.log('suspicious', r);} else console.log('ok  ', r, h.length);}
   catch(e){bad++; console.log('FAIL', r, e.message);}
 }
-vm.runInContext(`route('reading'); pick(0); nextQ();`,ctx); console.log('ok   reading pick/next');
+vm.runInContext(`route('reading'); pickAt(0,0); toggleScroll(); nextQ();`,ctx); console.log('ok   reading pick/next');
 vm.runInContext(`route('listen'); toggleRealListen(false); toggleRealListen(true);`,ctx); console.log('ok   listen toggle');
 process.exitCode = bad?1:0;

@@ -96,6 +96,11 @@ td{padding:8px 8px 8px 0;border-top:1px solid var(--mist);font-variant-numeric:t
 .task .t b{display:block}
 .task .t span{color:var(--muted);font-size:14px}
 .task .btn{margin:0;flex:none}
+.qbar{position:sticky;top:56px;z-index:15;display:flex;align-items:center;gap:12px;background:rgba(243,245,251,.96);backdrop-filter:blur(8px);padding:10px 2px;margin-bottom:6px}
+.qitem{padding:6px 0 4px}
+.qitem+.qitem{border-top:1px solid var(--mist);margin-top:18px;padding-top:18px}
+.qtext{font-size:17px;line-height:1.6;white-space:pre-line;margin-top:6px}
+.qhead{font-size:14px}
 .ring{--p:0;--c:var(--indigo);width:124px;height:124px;border-radius:50%;background:conic-gradient(var(--c) calc(var(--p)*1%),var(--mist) 0);display:grid;place-items:center;position:relative;margin:4px 0 12px}
 .ring::before{content:"";position:absolute;inset:11px;background:var(--card);border-radius:50%}
 .ring b{position:relative;font-size:30px;font-weight:800;color:var(--ink);letter-spacing:-.03em}
@@ -706,7 +711,7 @@ function practiceWrong(){
    ========================================================= */
 const KEY = 'toeic850-data';
 const DEFAULT = {target:990, quiz:{correct:0,total:0}, reading:{correct:0,total:0}, lq:{correct:0,total:0},
-                 listen:{done:0,score:0}, vocab:{}, custom:[], settings:{accent:'US', lock:true, realListen:true}, daily:{d:'', n:0}, streak:{last:'', count:0},
+                 listen:{done:0,score:0}, vocab:{}, custom:[], settings:{accent:'US', lock:true, realListen:true, scroll:true}, daily:{d:'', n:0}, streak:{last:'', count:0},
                  history:[], mocks:[], qstats:{}, pack:null};
 const clone = o => JSON.parse(JSON.stringify(o));
 /* Chỉ giữ lại dữ liệu đúng kiểu, vì dữ liệu localStorage hoặc file nhập vào không đáng tin tuyệt đối */
@@ -734,7 +739,8 @@ function sanitize(raw){
                   ex: String(c.ex || '').slice(0, 300), topic: 'Của tôi', pos: ''}));
   out.settings = {accent: raw.settings && raw.settings.accent === 'UK' ? 'UK' : 'US',
                   lock: !(raw.settings && raw.settings.lock === false),
-                  realListen: !(raw.settings && raw.settings.realListen === false)};
+                  realListen: !(raw.settings && raw.settings.realListen === false),
+                  scroll: !(raw.settings && raw.settings.scroll === false)};
   if (raw.daily && typeof raw.daily.d === 'string') out.daily = {d: raw.daily.d.slice(0, 10), n: num(raw.daily.n)};
   if (raw.streak && typeof raw.streak.last === 'string') out.streak = {last: raw.streak.last.slice(0, 10), count: num(raw.streak.count)};
   if (Array.isArray(raw.history))
@@ -1134,9 +1140,10 @@ function startQuiz(name, qs, statKey, back, mock, minutes, again, o = {}){
   const list = o.keepOrder ? qs : o.keepSets ? orderSets(qs) : shuffle(qs);
   Q = {name, qs: list.map(x => prep(normQ(x))), i:0, c:0, wrong:[], statKey, back, mock, answered:false,
        end: Date.now() + minutes*60000, again, strict: !!o.strict, allowBack: !!o.allowBack,
-       onDone: o.onDone || null, sel: {}, played: {}};
+       onDone: o.onDone || null, sel: {}, played: {}, done: {},
+       scroll: o.scroll !== undefined ? !!o.scroll : (S.settings.scroll !== false && !o.strict)};
   if (mock) tid = setInterval(() => { if (Q && Q.mock) updateTimer(); }, 1000);
-  drawQ();
+  if (Q.scroll) drawAll(); else drawQ();
 }
 
 function updateTimer(){
@@ -1154,8 +1161,9 @@ function listenAudioFor(q){
   if (Q.strict && q.partNo === 2 && q.o.length) return [...q.audio, ...q.o.map((o, k) => ({t: 'ABCD'[k] + '. ' + o}))];
   return q.audio;
 }
-function playQ(){
-  const q = Q && Q.qs[Q.i]; if (!q) return;
+function playQ(){ playAt(Q ? Q.i : 0); }
+function playAt(i){
+  const q = Q && Q.qs[i]; if (!q) return;
   const speak = () => { const lines = listenAudioFor(q); if (lines) say(lines, 0.9); };
   if (q.audioFile) playFile(q.audioFile, speak); else speak();
 }
@@ -1187,7 +1195,7 @@ function drawQ(){
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
         <span class="muted">${esc(Q.name)}${q.part && q.part !== Q.name ? ' · ' + esc(q.part) : ''} — Câu ${Q.i+1}/${total}</span>
-        ${Q.mock ? '<span class="timer" id="timer"></span>' : ''}
+        ${Q.mock ? '<span class="timer" id="timer"></span>' : (Q.strict ? '' : '<button class="btn alt" style="margin:0" onclick="toggleScroll()">Dạng cuộn</button>')}
       </div>
       <div class="bar" style="margin:8px 0 14px"><div style="width:${Q.i/total*100}%"></div></div>
       ${showPassage ? passageHTML(q.ctx, !sameSet) : ''}
@@ -1202,6 +1210,85 @@ function drawQ(){
     Q.played[Q.i] = true;
     if (!(Q.strict && sameSet)) playQ();   // bài nghe dùng chung chỉ phát một lần
   }
+}
+
+/* Dạng cuộn: mọi câu của bài nằm trên một trang, trả lời tại chỗ, không cần bấm "Câu tiếp theo" */
+function drawAll(){
+  const total = Q.qs.length;
+  const runs = [];
+  Q.qs.forEach((q, i) => {
+    const last = runs[runs.length - 1];
+    if (last && groupKey(Q.qs[last[0]]) === groupKey(q)) last.push(i); else runs.push([i]);
+  });
+  const cards = runs.map(run => {
+    const first = Q.qs[run[0]];
+    const passage = first.ctx && !(first.partNo === 1 && first.image) ? passageHTML(first.ctx, true) : '';
+    const items = run.map((i, j) => {
+      const q = Q.qs[i];
+      const opts = q.o.map((t, k) => `<button class="opt${Q.mock && Q.sel[i] === k ? ' sel' : ''}" onclick="pickAt(${i},${k})">${esc('ABCD'[k] + '. ' + t)}</button>`).join('');
+      return `<div class="qitem" id="qc${i}">
+        <div class="muted qhead">${esc(q.part)} · Câu ${i + 1}/${total}</div>
+        ${q.image ? `<img src="${esc(q.image)}" alt="" style="max-width:100%;border-radius:10px;margin-bottom:10px">` : ''}
+        ${q.audio && j === 0 ? `<button class="btn alt" onclick="playAt(${i})">🔊 Nghe${run.length > 1 ? ' (dùng cho câu ' + (run[0] + 1) + '–' + (run[run.length - 1] + 1) + ')' : ''}</button>` : ''}
+        <div class="qtext">${esc(q.q)}</div>
+        <div id="opts${i}">${opts}</div>
+        <div id="exp${i}"></div></div>`;
+    }).join('');
+    return `<div class="card">${passage}${items}</div>`;
+  }).join('');
+  app.innerHTML = `
+    <div class="qbar">
+      <div style="flex:1;min-width:0"><div class="muted" id="qprog" style="font-size:14px;margin-bottom:4px"></div><div class="bar"><div id="qfill" style="width:0"></div></div></div>
+      ${Q.mock ? '<span class="timer" id="timer"></span>' : '<button class="btn alt" style="margin:0" onclick="toggleScroll()">Từng câu</button>'}
+    </div>
+    <h2 style="margin:4px 2px 12px">${esc(Q.name)}</h2>
+    ${cards}
+    <div class="card">${Q.mock ? '<button class="btn" onclick="submitScroll()">Nộp bài</button>' : '<button class="btn" onclick="finishScroll()">Xem kết quả</button>'}</div>`;
+  scrollProgress();
+  if (Q.mock) updateTimer();
+}
+function scrollProgress(){
+  const n = Object.keys(Q.mock ? Q.sel : Q.done).length, total = Q.qs.length;
+  const p = document.getElementById('qprog'), f = document.getElementById('qfill');
+  if (p) p.textContent = Q.mock ? `Đã chọn ${n}/${total} câu` : `Đã làm ${n}/${total} · đúng ${Q.c}`;
+  if (f) f.style.width = (total ? n / total * 100 : 0) + '%';
+}
+function pickAt(i, k){
+  if (!Q) return;
+  if (Q.mock) {   // thi thử: chỉ ghi lựa chọn, đổi được, chấm khi nộp
+    Q.sel[i] = k;
+    document.querySelectorAll('#opts' + i + ' .opt').forEach((b, j) => b.classList.toggle('sel', j === k));
+    return scrollProgress();
+  }
+  if (Q.done[i] !== undefined) return;
+  const q = Q.qs[i], ok = k === q.a;
+  Q.done[i] = k;
+  if (ok) Q.c++; else Q.wrong.push(q);
+  recordAnswer(q, ok);
+  const btns = document.querySelectorAll('#opts' + i + ' .opt');
+  if (btns[q.a]) btns[q.a].classList.add('right');
+  if (!ok && btns[k]) btns[k].classList.add('wrong');
+  btns.forEach(b => b.disabled = true);
+  const ts = q.ts ? `<br><br><i>Nội dung bài nghe:</i> ${esc(q.ts)}` : '';
+  const srcLine = q.src ? `<br><span class="muted">Nguồn: ${esc(q.src)}${q.ver ? '' : ' · chưa duyệt'}</span>` : '';
+  const ex = document.getElementById('exp' + i);
+  if (ex) ex.innerHTML = `<div class="exp"><b>${ok ? 'Chính xác!' : 'Chưa đúng.'}</b> ${esc(q.e)}${ts}${srcLine}</div>`;
+  scrollProgress();
+}
+function finishScroll(){
+  const left = Q.qs.length - Object.keys(Q.done).length;
+  if (left && !confirm(`Còn ${left} câu chưa làm. Xem kết quả với các câu đã làm?`)) return;
+  Q.qs = Q.qs.filter((q, i) => Q.done[i] !== undefined);
+  if (!Q.qs.length) return route(Q.back);
+  finishQ();
+}
+function submitScroll(){
+  const left = Q.qs.length - Object.keys(Q.sel).length;
+  if (confirm(left ? `Còn ${left} câu chưa chọn. Nộp bài?` : 'Nộp bài và kết thúc phần này?')) finishQ();
+}
+function toggleScroll(){
+  S.settings.scroll = !S.settings.scroll; save();
+  if (Q && !Q.mock) { if (Q.again) Q.again(); else route(Q.back); }
 }
 
 function pick(k){
@@ -1745,7 +1832,7 @@ let LANG = localStorage.getItem('toeic850-lang') || 'vi';
 let currentRoute = 'home';
 const UI_EN = {
   'Trang chủ':'Home', 'Từ vựng':'Vocabulary', 'Part 5':'Part 5', 'Part 6-7':'Part 6-7', 'Part 1-4':'Part 1-4',
-  'Chép chính tả':'Dictation', 'Nội dung':'Content', 'Học':'Learn', 'Thi':'Test', 'Theo dõi':'Track', 'Hỗ trợ':'Help', 'Thi thử':'Mock test', 'Hướng dẫn Part':'Part guide', 'Hỏi AI':'Ask AI',
+  'Chép chính tả':'Dictation', 'Nội dung':'Content', 'Học':'Learn', 'Từng câu':'One at a time', 'Dạng cuộn':'Scroll view', 'Xem kết quả':'See results', 'Thi':'Test', 'Theo dõi':'Track', 'Hỗ trợ':'Help', 'Thi thử':'Mock test', 'Hướng dẫn Part':'Part guide', 'Hỏi AI':'Ask AI',
   'Các con số dưới đây là kết quả luyện tập cá nhân, không phải điểm thi chính thức.':'These numbers are your personal practice results, not official scores.',
   'Từ vựng đã thuộc':'Words mastered', 'Tiến độ từ vựng':'Vocabulary progress',
   'Gợi ý học mỗi ngày (khoảng 60 phút)':'Daily plan (about 60 minutes)',

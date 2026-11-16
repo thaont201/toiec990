@@ -35,6 +35,7 @@ const ctx = vm.createContext(sandbox);
 vm.runInContext(fs.readFileSync(REPO + '/vocab.js', 'utf8'), ctx);
 const html = fs.readFileSync(REPO + '/index.html', 'utf8');
 vm.runInContext(html.match(/<script>([\s\S]*?)<\/script>/)[1], ctx);
+vm.runInContext('DEFAULT.settings.scroll = false', ctx);   // các test cũ kiểm tra chế độ từng câu
 const run = c => vm.runInContext(c, ctx);
 
 let passed = 0;
