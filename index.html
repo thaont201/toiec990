@@ -34,6 +34,7 @@ main{max-width:860px;margin:20px auto;padding:0 16px}
 textarea{width:100%;min-height:110px;padding:10px;border-radius:8px;border:1px solid #cbd5e1;font-size:15px;font-family:inherit;margin-top:10px}
 .timer{font-size:20px;font-weight:700;color:var(--bad)}
 .muted{color:var(--muted)}
+.tag{display:inline-block;background:#e2e8f0;border-radius:6px;padding:2px 8px;font-size:13px;color:var(--muted)}
 .bar{height:10px;background:#e2e8f0;border-radius:6px;overflow:hidden}
 .bar div{height:100%;background:var(--main);transition:width .3s}
 </style>
@@ -87,7 +88,7 @@ const VOCAB_BASE = [
 /* Bộ từ vựng đầy đủ: 28 từ mẫu + 1000 từ trong vocab.js */
 /* Nếu thiếu vocab.js thì app vẫn chạy với 28 từ mẫu, không bị trắng trang */
 const VOCAB_MISSING = typeof VOCAB_EXTRA === 'undefined';
-const VOCAB = VOCAB_MISSING ? VOCAB_BASE : mergeVocab(VOCAB_BASE, VOCAB_EXTRA);
+let VOCAB = [], GROUPS = [];   // tạo lại trong buildVocab() sau khi đã có dữ liệu S
 
 /* ---- Chuyển IPA sang cách đọc bằng chữ (ước lượng gần đúng, trọng âm viết HOA) ---- */
 const IPA_MAP = [
@@ -151,32 +152,68 @@ function respell(ipa){
   }).join(' ');
 }
 
-/* ---- Chia từ vựng thành nhóm 20 từ theo chủ đề ---- */
+/* ---- Lặp ngắt quãng (SRS): mỗi từ có hộp 0–5, mỗi hộp là một khoảng chờ tính bằng ngày ---- */
+const DAY_MS = 86400000;
+const VOCAB_INTERVALS = [0, 1, 3, 7, 14, 30];  // hộp 0: mới hoặc vừa sai; hộp 5: chờ 30 ngày
+const KNOWN_BOX = 3;                            // từ ở hộp 3 trở lên (chờ từ 3 ngày) được tính là đã thuộc
 const GROUP_SIZE = 20;
-const GROUPS = (() => {
+const GROUP_UNLOCK = 0.8;                       // nhóm kế tiếp mở khi nhóm trước đạt 80%
+const LOCK_MSG = 'Nhóm này đang khóa. Hãy thuộc ít nhất 80% nhóm trước, hoặc tắt "Khóa nhóm tiếp theo" trên thanh công cụ.';
+function isDue(e, now){ return !e || e.due <= now; }
+function isKnown(e){ return !!e && e.box >= KNOWN_BOX; }
+/* Trạng thái mới của một từ sau khi người học đánh giá: 'again' (chưa biết), 'hard' (khó), 'good' (biết) */
+function gradeEntry(e, grade, now){
+  const cur = e || {box: 0, seen: 0, wrong: 0};
+  let box = cur.box || 0, due;
+  if (grade === 'again') { box = 0; due = now; }
+  else if (grade === 'hard') { box = Math.max(0, box - 1); due = now + (box === 0 ? 10 * 60000 : VOCAB_INTERVALS[box] * DAY_MS); }
+  else { box = Math.min(5, box + 1); due = now + VOCAB_INTERVALS[box] * DAY_MS; }
+  return {box, due, seen: (cur.seen || 0) + 1, wrong: (cur.wrong || 0) + (grade === 'again' ? 1 : 0)};
+}
+
+/* ---- Chia từ vựng thành nhóm 20 từ theo chủ đề. Từ tự thêm nằm trong nhóm "Của tôi" ---- */
+function buildVocab(){
+  const base = VOCAB_MISSING ? VOCAB_BASE : mergeVocab(VOCAB_BASE, VOCAB_EXTRA);
+  const keys = new Set(base.map(v => v.w.toLowerCase()));
+  VOCAB = [...base, ...(S.custom || []).filter(c => !keys.has(c.w.toLowerCase()))];
   const byTopic = {}, order = [];
   VOCAB.forEach(v => {
     const t = v.topic || 'Từ mẫu';
     if (!byTopic[t]) { byTopic[t] = []; order.push(t); }
     byTopic[t].push(v);
   });
-  const out = [];
+  GROUPS = [];
   order.forEach(t => {
     const list = byTopic[t];
     for (let i = 0; i < list.length; i += GROUP_SIZE) {
-      out.push({title: `${t} · Nhóm ${Math.floor(i / GROUP_SIZE) + 1}`, words: list.slice(i, i + GROUP_SIZE)});
+      GROUPS.push({title: `${t} · Nhóm ${Math.floor(i / GROUP_SIZE) + 1}`, words: list.slice(i, i + GROUP_SIZE)});
     }
   });
-  return out;
-})();
-let vgroup = 0;
-function groupKnown(g){ return g.words.filter(v => S.vocab[v.w] && S.vocab[v.w].known).length; }
-function setGroup(i){ vgroup = +i; vocabView(); }
-function nextGroup(){ vgroup = (vgroup + 1) % GROUPS.length; vocabView(); }
-function resetGroup(){
-  GROUPS[vgroup].words.forEach(v => { if (S.vocab[v.w]) S.vocab[v.w].known = false; });
-  save(); vocabView();
+  if (vgroup >= GROUPS.length) vgroup = 0;
 }
+let vgroup = 0;
+let vmode = 'group';   // 'group' | 'review' | 'test' | 'add'
+let VT = null;         // trạng thái bài kiểm tra nhóm
+function groupKnown(g){ return g.words.filter(v => isKnown(S.vocab[v.w])).length; }
+function groupLocked(i){
+  if (!S.settings.lock || i === 0) return false;
+  const prev = GROUPS[i - 1];
+  return groupKnown(prev) / prev.words.length < GROUP_UNLOCK;
+}
+function setGroup(i){
+  i = +i;
+  if (groupLocked(i)) alert(LOCK_MSG);
+  else { vgroup = i; vmode = 'group'; }
+  vocabView();
+}
+function nextGroup(){
+  for (let i = vgroup + 1; i < GROUPS.length; i++) {
+    if (!groupLocked(i)) { vgroup = i; vmode = 'group'; return vocabView(); }
+  }
+  alert('Chưa có nhóm nào tiếp theo được mở.');
+}
+function resetGroup(){ GROUPS[vgroup].words.forEach(v => { delete S.vocab[v.w]; }); save(); vocabView(); }
+
 
 /* Part 5 - Ngữ pháp và từ vựng (30 câu) */
 const GRAMMAR = [
@@ -432,7 +469,8 @@ function practiceWrong(){
    ========================================================= */
 const KEY = 'toeic850-data';
 const DEFAULT = {target:850, quiz:{correct:0,total:0}, reading:{correct:0,total:0}, lq:{correct:0,total:0},
-                 listen:{done:0,score:0}, vocab:{}, history:[], qstats:{}};
+                 listen:{done:0,score:0}, vocab:{}, custom:[], settings:{accent:'US', lock:true}, daily:{d:'', n:0}, streak:{last:'', count:0},
+                 history:[], qstats:{}};
 const clone = o => JSON.parse(JSON.stringify(o));
 /* Chỉ giữ lại dữ liệu đúng kiểu, vì dữ liệu localStorage hoặc file nhập vào không đáng tin tuyệt đối */
 function sanitize(raw){
@@ -443,10 +481,24 @@ function sanitize(raw){
   out.target = (Number.isFinite(raw.target) && raw.target >= 10 && raw.target <= 990) ? raw.target : 850;
   out.quiz = pair(raw.quiz); out.reading = pair(raw.reading); out.lq = pair(raw.lq);
   out.listen = {done: num(raw.listen && raw.listen.done), score: num(raw.listen && raw.listen.score)};
+  const ts = v => (Number.isFinite(v) && v >= 0 && v < 4e12) ? v : 0;   // mốc thời gian (ms)
   if (raw.vocab && typeof raw.vocab === 'object' && !Array.isArray(raw.vocab))
     out.vocab = Object.fromEntries(Object.entries(raw.vocab).slice(0, 5000)
       .filter(([k, v]) => k.length <= 80 && v && typeof v === 'object')
-      .map(([k, v]) => [k, {known: v.known === true, seen: num(v.seen)}]));
+      .map(([k, v]) => {
+        if (typeof v.box !== 'number')   // dữ liệu cũ chỉ có cờ known
+          return [k, {box: v.known === true ? KNOWN_BOX : 0, due: 0, seen: num(v.seen), wrong: 0}];
+        return [k, {box: Math.min(5, num(v.box)), due: ts(v.due), seen: num(v.seen), wrong: num(v.wrong)}];
+      }));
+  if (Array.isArray(raw.custom))
+    out.custom = raw.custom.slice(0, 500)
+      .filter(c => c && typeof c.w === 'string' && typeof c.m === 'string' && /^[A-Za-z][A-Za-z' -]{0,59}$/.test(c.w) && c.m.trim())
+      .map(c => ({w: c.w.trim(), m: c.m.trim().slice(0, 200), ipa: String(c.ipa || '').slice(0, 80),
+                  ex: String(c.ex || '').slice(0, 300), topic: 'Của tôi', pos: ''}));
+  out.settings = {accent: raw.settings && raw.settings.accent === 'UK' ? 'UK' : 'US',
+                  lock: !(raw.settings && raw.settings.lock === false)};
+  if (raw.daily && typeof raw.daily.d === 'string') out.daily = {d: raw.daily.d.slice(0, 10), n: num(raw.daily.n)};
+  if (raw.streak && typeof raw.streak.last === 'string') out.streak = {last: raw.streak.last.slice(0, 10), count: num(raw.streak.count)};
   if (Array.isArray(raw.history))
     out.history = raw.history.slice(0, 30).filter(h => h && typeof h === 'object')
       .map(h => ({date: String(h.date || '').slice(0, 40), name: String(h.name || '').slice(0, 80),
@@ -460,6 +512,7 @@ function sanitize(raw){
 function load(){ try { return sanitize(JSON.parse(localStorage.getItem(KEY))); } catch(e) { return clone(DEFAULT); } }
 function save(){ localStorage.setItem(KEY, JSON.stringify(S)); }
 let S = load();
+buildVocab();
 let Q = null, tid = null, vcur = null, lcur = '';
 
 const app = document.getElementById('app');
@@ -475,7 +528,7 @@ const prep = q => {
    TRANG CHỦ
    ========================================================= */
 function homeView(){
-  const known = Object.values(S.vocab).filter(v => v.known).length;
+  const known = Object.values(S.vocab).filter(isKnown).length;
   const pct = (c,t) => t ? Math.round(c/t*100) : 0;
   const hist = S.history.slice(0,8).map(h => `<li>${esc(h.date)} — ${esc(h.name)}: ${esc(h.score)} (${h.pct}%)</li>`).join('');
   app.innerHTML = `
@@ -485,6 +538,7 @@ function homeView(){
       <p class="muted" style="margin:0 0 14px">Các con số dưới đây là kết quả luyện tập cá nhân, không phải điểm thi chính thức.</p>
       <div class="stats">
         <div class="stat"><b>${known}/${VOCAB.length}</b><span>Từ vựng đã thuộc</span></div>
+        <div class="stat"><b>${currentStreak()}</b><span>Ngày học liên tiếp</span></div>
         <div class="stat"><b>${pct(S.quiz.correct,S.quiz.total)}%</b><span>Part 5 (${S.quiz.total} câu)</span></div>
         <div class="stat"><b>${pct(S.reading.correct,S.reading.total)}%</b><span>Part 6-7 (${S.reading.total} câu)</span></div>
         <div class="stat"><b>${pct(S.lq.correct,S.lq.total)}%</b><span>Part 1-4 (${S.lq.total} câu)</span></div>
@@ -513,46 +567,250 @@ function homeView(){
 /* =========================================================
    TỪ VỰNG (flashcard)
    ========================================================= */
+function escRe(s){ return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+const todayStr = () => new Date().toLocaleDateString('sv-SE');
+function yesterdayStr(){ return new Date(Date.now() - DAY_MS).toLocaleDateString('sv-SE'); }
+function bumpDaily(){
+  const d = todayStr();
+  S.daily = (S.daily && S.daily.d === d) ? {d, n: S.daily.n + 1} : {d, n: 1};
+  if (S.streak.last === d) return;
+  S.streak = {last: d, count: S.streak.last === yesterdayStr() ? S.streak.count + 1 : 1};
+}
+/* Chuỗi học còn hiệu lực nếu học hôm nay hoặc hôm qua */
+function currentStreak(){
+  const last = S.streak.last;
+  return (last === todayStr() || last === yesterdayStr()) ? S.streak.count : 0;
+}
+function topicStats(topic){
+  const words = VOCAB.filter(v => (v.topic || 'Từ mẫu') === topic);
+  return {known: words.filter(v => isKnown(S.vocab[v.w])).length, total: words.length};
+}
+function duePool(){
+  const now = Date.now();
+  if (vmode === 'review') return VOCAB.filter(v => S.vocab[v.w] && isDue(S.vocab[v.w], now));
+  return GROUPS[vgroup].words.filter(v => isDue(S.vocab[v.w], now));
+}
+function reviewCount(){
+  const now = Date.now();
+  return VOCAB.filter(v => S.vocab[v.w] && isDue(S.vocab[v.w], now)).length;
+}
+function nextDueText(words){
+  const now = Date.now();
+  const times = words.map(v => S.vocab[v.w]).filter(e => e && e.due > now).map(e => e.due);
+  if (!times.length) return '';
+  return new Date(Math.min(...times)).toLocaleString('vi-VN', {dateStyle: 'short', timeStyle: 'short'});
+}
+function setVmode(m){ vmode = m; vocabView(); }
+function toggleLock(on){ S.settings.lock = !!on; save(); vocabView(); }
+function setAccent(a){ S.settings.accent = a === 'UK' ? 'UK' : 'US'; save(); vocabView(); }
+function accentLang(){ return S.settings.accent === 'UK' ? 'en-GB' : 'en-US'; }
+function speakText(text, rate){ say([{t: text, lang: accentLang()}], rate); }
+
 function vocabView(){
+  if (vmode === 'add') return addWordView();
+  if (vmode === 'test') return vtestView();
   const group = GROUPS[vgroup];
-  const pool = group.words.filter(v => !S.vocab[v.w] || !S.vocab[v.w].known);
-  const selector = `<select onchange="setGroup(this.value)" style="padding:8px;border-radius:8px;font-size:15px;width:100%;margin-bottom:10px">${GROUPS.map((g, i) => `<option value="${i}" ${i === vgroup ? 'selected' : ''}>${esc(g.title)} (${groupKnown(g)}/${g.words.length})</option>`).join('')}</select>`;
+  const pool = duePool();
+  const selector = `<select onchange="setGroup(this.value)" style="padding:8px;border-radius:8px;font-size:15px;width:100%;margin-bottom:10px">${GROUPS.map((g, i) => `<option value="${i}" ${i === vgroup ? 'selected' : ''} ${groupLocked(i) ? 'disabled' : ''}>${groupLocked(i) ? '🔒 ' : ''}${esc(g.title)} (${groupKnown(g)}/${g.words.length})</option>`).join('')}</select>`;
+  const topic = group.words[0].topic || 'Từ mẫu';
+  const tp = topicStats(topic);
+  const status = `<div style="margin-bottom:10px"><div class="muted" style="font-size:14px;margin-bottom:4px">Chủ đề "${esc(topic)}": ${tp.known}/${tp.total} từ đã thuộc · Chuỗi học: ${currentStreak()} ngày</div><div class="bar"><div style="width:${tp.total ? tp.known / tp.total * 100 : 0}%"></div></div></div>`;
+  const controls = `
+    <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:10px">
+      ${vmode === 'review'
+        ? `<button class="btn alt" onclick="setVmode('group')">← Quay về nhóm</button>`
+        : `<button class="btn alt" onclick="setVmode('review')">Ôn từ cần ôn (${reviewCount()})</button>`}
+      <button class="btn alt" onclick="startVTest()">Kiểm tra nhóm</button>
+      <button class="btn alt" onclick="setVmode('add')">+ Thêm từ</button>
+      <select onchange="setAccent(this.value)" style="padding:8px;border-radius:8px">
+        <option value="US" ${S.settings.accent !== 'UK' ? 'selected' : ''}>Giọng Mỹ</option>
+        <option value="UK" ${S.settings.accent === 'UK' ? 'selected' : ''}>Giọng Anh</option>
+      </select>
+      <label class="muted"><input type="checkbox" ${S.settings.lock ? 'checked' : ''} onchange="toggleLock(this.checked)"> Khóa nhóm tiếp theo</label>
+    </div>
+    ${status}`;
+  const todayN = (S.daily && S.daily.d === todayStr()) ? S.daily.n : 0;
   if (!pool.length) {
-    app.innerHTML = `<div class="card">${selector}🎉 Bạn đã thuộc hết nhóm này.<br><br><button class="btn" onclick="nextGroup()">Sang nhóm tiếp theo</button> <button class="btn alt" onclick="resetGroup()">Làm lại nhóm này</button></div>`;
+    const words = vmode === 'review' ? VOCAB : group.words;
+    const next = nextDueText(words);
+    const done = vmode !== 'review' && groupKnown(group) === group.words.length;
+    const msg = vmode === 'review' ? 'Hiện không có từ nào cần ôn.'
+              : done ? '🎉 Bạn đã thuộc hết nhóm này.'
+              : 'Đã hết thẻ đến hạn trong nhóm này.';
+    const actions = vmode === 'review' ? '' :
+      '<button class="btn" onclick="nextGroup()">Sang nhóm tiếp theo</button> <button class="btn alt" onclick="resetGroup()">Làm lại nhóm này</button>';
+    app.innerHTML = `<div class="card">${selector}${controls}${msg}${next ? `<br><span class="muted">Thẻ tiếp theo đến hạn: ${esc(next)}</span>` : ''}<br><br>${actions}</div>`;
     return;
   }
-  vcur = pool[Math.floor(Math.random()*pool.length)];
+  vcur = pool[Math.floor(Math.random() * pool.length)];
+  const tags = [vcur.pos, vcur.topic].filter(Boolean).map(t => `<span class="tag">${esc(t)}</span>`).join(' ');
   app.innerHTML = `
     <div class="card">
-      ${selector}
-      <p class="muted">Còn ${pool.length} từ chưa thuộc trong nhóm này. Bấm vào thẻ để xem nghĩa.</p>
+      ${selector}${controls}
+      <p class="muted">Còn ${pool.length} thẻ đến hạn · Hôm nay đã ôn ${todayN} thẻ. Phím tắt: Space lật thẻ, 1/2/3 để chấm điểm.</p>
       <div class="flash" onclick="flip()">
         <div class="word">${esc(vcur.w)}</div>
         <div style="font-size:26px;font-weight:700;color:var(--main);margin-top:6px">${esc(respell(vcur.ipa))}</div>
         <div style="font-size:14px;color:var(--muted)">${esc(vcur.ipa || '')}</div>
-        <button class="btn alt" style="margin-top:8px" onclick="event.stopPropagation();say([{t:vcur.w}],0.8)">🔊 Phát âm</button>
+        <div style="margin-top:6px">${tags}</div>
+        <div style="margin-top:8px">
+          <button class="btn alt" onclick="event.stopPropagation();speakText(vcur.w,1)">🔊 Phát âm</button>
+          <button class="btn alt" onclick="event.stopPropagation();speakText(vcur.w,0.6)">🐢 Chậm</button>
+        </div>
         <div id="back" hidden>
           <div style="font-size:20px;margin-top:10px">${esc(vcur.m)}</div>
-          <div class="exp">${esc(vcur.ex)}</div>
+          <div class="exp">${vcur.ex ? esc(vcur.ex) : '<span class="muted">Chưa có câu ví dụ cho từ này.</span>'}</div>
+          ${vcur.col ? `<div class="muted">Cụm từ đi kèm: ${esc(vcur.col)}</div>` : ''}
+          ${vcur.conf ? `<div class="muted">Dễ nhầm với: ${esc(vcur.conf)}</div>` : ''}
         </div>
       </div>
       <div style="margin-top:14px;text-align:center">
-        <button class="btn alt" onclick="markV(false)">Chưa thuộc</button>
-        <button class="btn" onclick="markV(true)">Đã thuộc</button>
+        <button class="btn alt" id="g-flip" onclick="flip()">Xem nghĩa</button>
+        <span id="g-btns" hidden>
+          <button class="btn alt" onclick="grade('again')">Chưa biết (1)</button>
+          <button class="btn alt" onclick="grade('hard')">Khó (2)</button>
+          <button class="btn" onclick="grade('good')">Biết (3)</button>
+        </span>
       </div>
     </div>`;
 }
-function flip(){ const b = document.getElementById('back'); if (b) b.hidden = !b.hidden; }
-function markV(known){
-  const prev = S.vocab[vcur.w] || {seen:0};
-  S.vocab[vcur.w] = {known, seen: prev.seen + 1};
-  save(); vocabView();
+function flip(){
+  const b = document.getElementById('back');
+  if (!b) return;
+  b.hidden = !b.hidden;
+  const shown = !b.hidden;
+  document.getElementById('g-btns').hidden = !shown;
+  document.getElementById('g-flip').style.display = shown ? 'none' : '';
 }
-function resetVocab(){ S.vocab = {}; save(); vocabView(); }
+function grade(g){
+  if (!vcur) return;
+  S.vocab[vcur.w] = gradeEntry(S.vocab[vcur.w], g, Date.now());
+  bumpDaily(); save(); vocabView();
+}
+
+/* ---- Thêm từ của tôi ---- */
+function addWordView(){
+  const inp = 'width:100%;padding:10px;border-radius:8px;border:1px solid #cbd5e1;font-size:15px;margin-bottom:8px';
+  app.innerHTML = `<div class="card"><b>Thêm từ của tôi</b>
+    <p class="muted">Từ mới sẽ vào nhóm "Của tôi" và được lặp lại theo lịch như các từ khác.</p>
+    <input id="nw" maxlength="60" placeholder="Từ tiếng Anh, ví dụ: onboarding" style="${inp}">
+    <input id="nm" maxlength="200" placeholder="Nghĩa tiếng Việt" style="${inp}">
+    <input id="ni" maxlength="80" placeholder="Phiên âm IPA (không bắt buộc)" style="${inp}">
+    <input id="ne" maxlength="300" placeholder="Câu ví dụ (không bắt buộc)" style="${inp}">
+    <p id="nerr" style="color:var(--bad)"></p>
+    <button class="btn" onclick="addCustom()">Thêm từ</button>
+    <button class="btn alt" onclick="setVmode('group')">Quay lại</button></div>`;
+}
+function addCustom(){
+  const err = document.getElementById('nerr');
+  const w = document.getElementById('nw').value.trim().replace(/\s+/g, ' ');
+  const m = document.getElementById('nm').value.trim();
+  const ipa = document.getElementById('ni').value.trim();
+  const ex = document.getElementById('ne').value.trim();
+  if (!/^[A-Za-z][A-Za-z' -]{0,59}$/.test(w)) { err.textContent = 'Từ chỉ gồm chữ cái tiếng Anh, khoảng trắng, dấu nháy hoặc gạch ngang.'; return; }
+  if (!m) { err.textContent = 'Cần nhập nghĩa tiếng Việt.'; return; }
+  if (VOCAB.some(v => v.w.toLowerCase() === w.toLowerCase())) { err.textContent = 'Từ này đã có trong bộ từ.'; return; }
+  if (S.custom.length >= 500) { err.textContent = 'Đã đạt giới hạn 500 từ tự thêm.'; return; }
+  S.custom.push({w, m: m.slice(0, 200), ipa: ipa.slice(0, 80), ex: ex.slice(0, 300), topic: 'Của tôi', pos: ''});
+  save(); buildVocab();
+  vgroup = GROUPS.findIndex(g => g.words.some(v => v.w === w));
+  vmode = 'group'; vocabView();
+}
+
+/* ---- Kiểm tra nhóm: 4 dạng câu (Việt→Anh, Anh→Việt, nghe chọn từ, điền từ vào câu) ---- */
+function makeTQ(v){
+  const kinds = ['vi2en', 'en2vi', 'listen'];
+  if (v.ex && new RegExp(escRe(v.w), 'i').test(v.ex)) kinds.push('fill');
+  const kind = kinds[Math.floor(Math.random() * kinds.length)];
+  const key = kind === 'en2vi' ? 'm' : 'w';
+  const correct = v[key];
+  const distract = [...new Set(shuffle(VOCAB.filter(x => x.w !== v.w)).map(x => x[key]))]
+    .filter(t => t !== correct).slice(0, 3);
+  const opts = shuffle([correct, ...distract]);
+  const prompt = kind === 'vi2en' ? v.m
+    : kind === 'en2vi' ? v.w
+    : kind === 'fill' ? v.ex.replace(new RegExp(escRe(v.w), 'i'), '_____') : '';
+  return {kind, v, prompt, opts, a: opts.indexOf(correct)};
+}
+function startVTest(){
+  if (groupLocked(vgroup)) return alert(LOCK_MSG);
+  const words = shuffle(GROUPS[vgroup].words).slice(0, 20);
+  if (words.length < 4) return alert('Nhóm này cần ít nhất 4 từ để kiểm tra.');
+  VT = {words, i: 0, c: 0, wrong: [], answered: false, picked: -1, ok: false, q: makeTQ(words[0])};
+  vmode = 'test';
+  vtestView();
+}
+function vtestView(){
+  const q = VT.q, n = VT.words.length;
+  const prompt = q.kind === 'listen'
+    ? `<button class="btn alt" onclick="speakText(VT.q.v.w,1)">🔊 Nghe lại</button>`
+    : `<div style="font-size:20px;margin:10px 0">${esc(q.prompt)}</div>`;
+  const opts = q.opts.map((o, k) => {
+    let cls = 'opt';
+    if (VT.answered && k === q.a) cls += ' right';
+    else if (VT.answered && k === VT.picked) cls += ' wrong';
+    return `<button class="${cls}" onclick="pickT(${k})" ${VT.answered ? 'disabled' : ''}>${esc(o)}</button>`;
+  }).join('');
+  const fb = VT.answered
+    ? `<div class="exp"><b>${VT.ok ? 'Chính xác!' : 'Chưa đúng.'}</b> ${esc(q.v.w)}: ${esc(q.v.m)}${q.v.ex ? `<br>${esc(q.v.ex)}` : ''}</div>
+       <button class="btn" onclick="nextT()">${VT.i + 1 < n ? 'Câu tiếp theo' : 'Xem kết quả'}</button>`
+    : '';
+  app.innerHTML = `<div class="card">
+    <b>Kiểm tra nhóm: ${esc(GROUPS[vgroup].title)}</b>
+    <p class="muted">Câu ${VT.i + 1}/${n} · Đúng ${VT.c}</p>
+    ${prompt}${opts}${fb}
+    <p><button class="btn alt" onclick="setVmode('group')">Thoát</button></p></div>`;
+  if (q.kind === 'listen' && !VT.answered) speakText(q.v.w, 1);
+}
+function pickT(k){
+  if (!VT || VT.answered) return;
+  VT.answered = true; VT.picked = k; VT.ok = k === VT.q.a;
+  if (VT.ok) VT.c++; else VT.wrong.push(VT.q.v);
+  S.vocab[VT.q.v.w] = gradeEntry(S.vocab[VT.q.v.w], VT.ok ? 'good' : 'again', Date.now());
+  bumpDaily(); save(); vtestView();
+}
+function nextT(){
+  VT.i++; VT.answered = false;
+  if (VT.i >= VT.words.length) return finishT();
+  VT.q = makeTQ(VT.words[VT.i]);
+  vtestView();
+}
+function finishT(){
+  const n = VT.words.length, pct = Math.round(VT.c / n * 100);
+  const msg = pct >= 85 ? 'Rất tốt, hãy giữ nhịp độ này.'
+            : pct >= 60 ? 'Khá ổn. Hãy xem lại các từ sai.'
+            : 'Cần ôn thêm. Hãy đọc lại nghĩa các từ sai.';
+  const wrong = VT.wrong.length
+    ? `<p>Từ sai (${VT.wrong.length}): ${VT.wrong.map(v => esc(v.w)).join(', ')}</p>`
+    : '<p class="muted">Bạn không làm sai từ nào.</p>';
+  app.innerHTML = `<div class="card"><b>Kết quả: ${VT.c}/${n} (${pct}%)</b><p>${msg}</p>${wrong}
+    <button class="btn" onclick="setVmode('review')">Ôn từ sai ngay</button>
+    <button class="btn alt" onclick="setVmode('group')">Quay về nhóm</button></div>`;
+}
+
+/* Phím tắt: Space lật thẻ, 1/2/3 chấm điểm, 1–4 chọn đáp án khi kiểm tra */
+document.addEventListener('keydown', e => {
+  if (currentRoute !== 'vocab' || ['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
+  if (vmode === 'test' && VT) {
+    if (!VT.answered && /^[1-4]$/.test(e.key)) return pickT(+e.key - 1);
+    if (VT.answered && e.key === 'Enter') return nextT();
+    return;
+  }
+  if (vmode !== 'group' && vmode !== 'review') return;
+  if (e.key === ' ' && vcur) { e.preventDefault(); flip(); }
+  else if (/^[123]$/.test(e.key) && vcur) {
+    const b = document.getElementById('back');
+    if (b && !b.hidden) grade(['again', 'hard', 'good'][+e.key - 1]);
+  }
+});
 
 /* =========================================================
    ÂM THANH (đọc văn bản bằng giọng nói của trình duyệt)
    ========================================================= */
+function pickVoice(lang){
+  const vs = speechSynthesis.getVoices();
+  return vs.find(v => v.lang === lang) || vs.find(v => v.lang.startsWith(lang.slice(0, 2))) || null;
+}
 function say(lines, rate){
   if (!('speechSynthesis' in window)) return;
   speechSynthesis.cancel();
@@ -561,7 +819,10 @@ function say(lines, rate){
     if (i >= lines.length) return;
     const L = lines[i++];
     const u = new SpeechSynthesisUtterance(L.t);
-    u.lang = 'en-US'; u.rate = rate;
+    u.lang = L.lang || 'en-US';
+    const voice = pickVoice(u.lang);
+    if (voice) u.voice = voice;
+    u.rate = rate;
     u.pitch = L.v ? 1.3 : 0.9;   // hai người nói khác giọng
     u.onend = next;
     speechSynthesis.speak(u);
@@ -935,14 +1196,22 @@ const UI_EN = {
   'Haiku 5.5 (nhanh, tiết kiệm)':'Haiku 5.5 (fast, low cost)', 'Sonnet 5.5 (giải thích kỹ hơn)':'Sonnet 5.5 (more detailed)',
   'Hỏi bất kỳ điều gì về TOEIC: giải thích đáp án, nghĩa và cách dùng từ, cách làm bài...':'Ask anything about TOEIC: answer explanations, word meanings and usage, test strategy...',
   'Đang trả lời...':'Thinking...',
-  'Nhập câu hỏi...':'Type your question...', 'Gõ câu bạn nghe được...':'Type the sentence you heard...'
+  'Nhập câu hỏi...':'Type your question...', 'Gõ câu bạn nghe được...':'Type the sentence you heard...',
+  'Ôn từ cần ôn':'Review due words', '← Quay về nhóm':'← Back to group', 'Kiểm tra nhóm':'Group quiz',
+  '+ Thêm từ':'+ Add word', 'Giọng Mỹ':'US accent', 'Giọng Anh':'UK accent', 'Khóa nhóm tiếp theo':'Lock next groups',
+  'Xem nghĩa':'Show meaning', 'Chưa biết (1)':'Still learning (1)', 'Khó (2)':'Hard (2)', 'Biết (3)':'Know it (3)',
+  '🐢 Chậm':'🐢 Slow', 'Thoát':'Exit',
+  'Chưa có câu ví dụ cho từ này.':'No example sentence yet.', 'Thêm từ của tôi':'Add my word',
+  'Từ mới sẽ vào nhóm "Của tôi" và được lặp lại theo lịch như các từ khác.':'New words go into the "My words" group and repeat on the same schedule.',
+  'Thêm từ':'Add word', 'Quay lại':'Back', 'Đã hết thẻ đến hạn trong nhóm này.':'No cards due in this group right now.',
+  'Hiện không có từ nào cần ôn.':'No words due for review.', 'Thẻ tiếp theo đến hạn:':'Next card due:'
 };
 const TOPIC_EN = {
   'Công việc chung':'General business', 'Tài chính - kế toán':'Finance & accounting', 'Marketing - bán hàng':'Marketing & sales',
   'Nhân sự - tuyển dụng':'HR & recruiting', 'Du lịch - đi lại':'Travel', 'Khách sạn - nhà hàng':'Hotels & restaurants',
   'Sản xuất - kho vận':'Manufacturing & logistics', 'Công nghệ - văn phòng':'Technology & office',
   'Hợp đồng - pháp lý - bảo hiểm':'Contracts, legal & insurance', 'Mua sắm - khách hàng - bất động sản':'Shopping, customers & real estate',
-  'Từ mẫu':'Sample words'
+  'Từ mẫu':'Sample words', 'Của tôi':'My words'
 };
 const POS_EN = {'danh từ':'noun','động từ':'verb','tính từ':'adjective','trạng từ':'adverb','giới từ':'preposition','cụm từ':'phrase'};
 const UI_PATTERNS = [

@@ -1042,7 +1042,7 @@ function parseVocab(raw){
     if (line.startsWith('#')) { topic = line.slice(1).trim(); return; }
     const [w, p, m, ipa] = line.split('|').map(s => s.trim());
     if (!w || !m) return;
-    out.push({w, m, ipa: ipa || '', ex: `${POS[p] || p} · ${topic}`, topic});
+    out.push({w, m, ipa: ipa || '', ex: '', pos: POS[p] || p, topic});
   });
   return out;
 }
