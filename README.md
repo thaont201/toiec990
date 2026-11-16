@@ -17,3 +17,6 @@ Tiến độ lưu trong trình duyệt. "Hỏi AI" dùng API key do người dù
 - Mọi nội dung hiển thị đều đi qua hàm `esc`. File nhập vào (JSON) được kiểm tra kiểu dữ liệu và giới hạn 1 MB.
 - API key Anthropic chỉ lưu trong localStorage của trình duyệt này và chỉ gửi tới api.anthropic.com. Nên dùng key có giới hạn chi tiêu.
 - Hạn chế còn lại: CSP có `'unsafe-inline'` vì giao diện dùng thuộc tính `onclick`. Muốn bỏ hẳn cần chuyển sang gắn sự kiện bằng JavaScript.
+
+## Nội dung
+Thêm câu ví dụ, cụm từ, từ dễ nhầm, giọng thật và câu hỏi bằng gói JSON có ghi nguồn. Xem `CONTENT.md`; kiểm tra bằng `node tools/validate-pack.js`.

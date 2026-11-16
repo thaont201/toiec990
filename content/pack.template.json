@@ -1,0 +1,27 @@
+{
+  "_template": true,
+  "version": 1,
+  "name": "Tên gói (ví dụ: Lô 1 – 50 từ công việc chung)",
+  "words": [
+    {
+      "w": "invoice",
+      "ex": [{"t": "Please attach the invoice to your expense report.", "src": "Ghi rõ sách/trang/URL và giấy phép"}],
+      "col": [{"t": "issue an invoice", "m": "xuất hóa đơn", "src": "Ghi nguồn"}],
+      "conf": [{"w": "receipt", "note": "receipt là biên lai sau khi trả tiền; invoice là hóa đơn yêu cầu thanh toán", "src": "Ghi nguồn"}],
+      "audio": "audio/words/invoice.mp3"
+    }
+  ],
+  "qs": [
+    {
+      "part": 5,
+      "q": "The manager asked all staff to ___ their reports by Friday.",
+      "o": ["submit", "submits", "submitted", "submitting"],
+      "a": 0,
+      "e": "Sau \"to\" dùng động từ nguyên mẫu.",
+      "src": "Ghi nguồn câu hỏi",
+      "verified": false,
+      "qtype": "ngữ pháp",
+      "level": 2
+    }
+  ]
+}

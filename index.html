@@ -173,11 +173,114 @@ function gradeEntry(e, grade, now){
   return {box, due, seen: (cur.seen || 0) + 1, wrong: (cur.wrong || 0) + (grade === 'again' ? 1 : 0)};
 }
 
+/* =========================================================
+   GÓI NỘI DUNG (câu ví dụ, cụm từ, từ dễ nhầm, giọng thật, câu hỏi mới)
+   Mỗi mục bắt buộc ghi nguồn ("src"). Khối giữa hai dấu mốc được tools/validate-pack.js dùng lại.
+   ========================================================= */
+/*PACK-VALIDATOR-BEGIN*/
+const AUDIO_RE = /^audio\/[A-Za-z0-9_\-\/]+\.(mp3|ogg|m4a|wav)$/;
+const PACK_IMG_RE = /^images\/[A-Za-z0-9_\-\/]+\.(png|jpe?g|webp|gif)$/;
+function packContains(text, key){
+  let stem = key.split(/[ -]/)[0];
+  stem = stem.slice(0, Math.max(3, stem.length - 3));
+  return text.toLowerCase().includes(stem);
+}
+function validatePack(raw){
+  const out = {name: '', words: {}, qs: []}, errors = [];
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {pack: out, errors: ['Gói phải là một đối tượng JSON.']};
+  if (raw._template === true) errors.push('Đây là file mẫu: hãy thay nội dung thật và xóa dòng "_template".');
+  if (raw.version !== 1) errors.push('Thiếu "version": 1.');
+  out.name = typeof raw.name === 'string' ? raw.name.trim().slice(0, 80) : '';
+  const str = (v, max) => typeof v === 'string' ? v.trim().slice(0, max) : '';
+  const list = (v, max) => Array.isArray(v) ? v.slice(0, max) : [];
+  if (raw._template === true) return {pack: {name: '', words: {}, qs: []}, errors};
+  list(raw.words, 5000).forEach((x, i) => {
+    const tag = 'words[' + i + ']';
+    if (!x || typeof x.w !== 'string' || !/^[A-Za-z][A-Za-z' -]{0,59}$/.test(x.w.trim())) { errors.push(tag + ': thiếu hoặc sai "w".'); return; }
+    const key = x.w.trim().toLowerCase();
+    const e = {ex: [], col: [], conf: [], audio: ''};
+    list(x.ex, 3).forEach((it, j) => {
+      const t = str(it && it.t, 200), src = str(it && it.src, 120);
+      if (t.length < 10) errors.push(`${tag}.ex[${j}]: câu quá ngắn hoặc thiếu "t".`);
+      else if (!src) errors.push(`${tag}.ex[${j}]: thiếu "src" (nguồn).`);
+      else if (!packContains(t, key)) errors.push(`${tag}.ex[${j}]: câu không chứa từ "${key}".`);
+      else e.ex.push({t, src});
+    });
+    list(x.col, 6).forEach((it, j) => {
+      const t = str(it && it.t, 60), m = str(it && it.m, 100), src = str(it && it.src, 120);
+      if (t.length < 3) errors.push(`${tag}.col[${j}]: thiếu "t".`);
+      else if (!src) errors.push(`${tag}.col[${j}]: thiếu "src" (nguồn).`);
+      else e.col.push({t, m, src});
+    });
+    list(x.conf, 4).forEach((it, j) => {
+      const w = str(it && it.w, 40), note = str(it && it.note, 160), src = str(it && it.src, 120);
+      if (w.length < 2 || note.length < 5) errors.push(`${tag}.conf[${j}]: thiếu "w" hoặc "note".`);
+      else if (!src) errors.push(`${tag}.conf[${j}]: thiếu "src" (nguồn).`);
+      else e.conf.push({w, note, src});
+    });
+    if (x.audio !== undefined) {
+      if (typeof x.audio === 'string' && AUDIO_RE.test(x.audio)) e.audio = x.audio;
+      else errors.push(tag + ': "audio" phải là đường dẫn audio/…(mp3|ogg|m4a|wav).');
+    }
+    if (e.ex.length || e.col.length || e.conf.length || e.audio) out.words[key] = e;
+  });
+  list(raw.qs, 3000).forEach((x, i) => {
+    const tag = 'qs[' + i + ']';
+    const fail = m => errors.push(tag + ': ' + m);
+    if (!x || typeof x !== 'object') return fail('không phải đối tượng.');
+    const part = Number(x.part);
+    if (!Number.isInteger(part) || part < 1 || part > 7) return fail('"part" phải từ 1 đến 7.');
+    const o = list(x.o, 4).map(v => str(v, 300));
+    if (o.length < 3 || o.some(v => !v)) return fail('"o" cần 3–4 đáp án không rỗng.');
+    if (!Number.isInteger(x.a) || x.a < 0 || x.a >= o.length) return fail('"a" phải là chỉ số đáp án đúng.');
+    const q = str(x.q, 2000);
+    if (!q && part > 2) return fail('thiếu "q".');
+    const e = str(x.e, 1500);
+    if (!e) return fail('thiếu "e" (giải thích).');
+    const src = str(x.src, 120);
+    if (!src) return fail('thiếu "src" (nguồn).');
+    const ts = str(x.ts, 3000);
+    const audioFile = (typeof x.audioFile === 'string' && AUDIO_RE.test(x.audioFile)) ? x.audioFile : '';
+    if (x.audioFile !== undefined && !audioFile) return fail('"audioFile" sai định dạng.');
+    if (part <= 4 && !ts && !audioFile) return fail('Part 1–4 cần "ts" (lời thoại) hoặc "audioFile".');
+    let ctx = null;
+    if (Array.isArray(x.ctx)) ctx = x.ctx.slice(0, 5).filter(p => p && typeof p.text === 'string' && p.text.trim())
+      .map(p => ({title: str(p.title, 80), text: p.text.trim().slice(0, 4000)}));
+    else if (typeof x.ctx === 'string' && x.ctx.trim()) ctx = x.ctx.trim().slice(0, 4000);
+    if (part >= 6 && (!ctx || (Array.isArray(ctx) && !ctx.length))) return fail('Part 6–7 cần "ctx" (đoạn văn).');
+    if (x.image !== undefined && !(typeof x.image === 'string' && PACK_IMG_RE.test(x.image))) return fail('"image" phải là images/….(png|jpg|webp|gif).');
+    const item = {partNo: part, q, o, a: x.a, e, src, ver: x.verified === true, ts, noshuf: part === 1, ctx};
+    if (audioFile) item.audioFile = audioFile;
+    if (x.image) item.image = x.image;
+    if ([1, 2, 3].includes(x.level)) item.level = x.level;
+    if (typeof x.qtype === 'string') item.qtype = x.qtype.trim().slice(0, 30);
+    if (typeof x.setId === 'string' && /^[A-Za-z0-9_\-]{1,40}$/.test(x.setId)) item.setId = 'K-' + x.setId;
+    out.qs.push(item);
+  });
+  return {pack: out, errors};
+}
+/*PACK-VALIDATOR-END*/
+
+let PACK_FILE = null;   // gói dùng chung tải từ content/pack.json
+let PACK_ERRORS = [];   // lỗi của lần nhập gần nhất
+const packWords = () => ({...(PACK_FILE ? PACK_FILE.words : {}), ...((S && S.pack) ? S.pack.words : {})});
+const packQs = () => [...(PACK_FILE ? PACK_FILE.qs : []), ...((S && S.pack) ? S.pack.qs : [])];
+function playFile(path, fallback){
+  if (!AUDIO_RE.test(String(path)) || typeof Audio === 'undefined') { if (fallback) fallback(); return; }
+  const a = new Audio(path);
+  a.onerror = () => { if (fallback) fallback(); };
+  const p = a.play(); if (p && p.catch) p.catch(() => { if (fallback) fallback(); });
+}
+
 /* ---- Chia từ vựng thành nhóm 20 từ theo chủ đề. Từ tự thêm nằm trong nhóm "Của tôi" ---- */
 function buildVocab(){
   const base = VOCAB_MISSING ? VOCAB_BASE : mergeVocab(VOCAB_BASE, VOCAB_EXTRA);
   const keys = new Set(base.map(v => v.w.toLowerCase()));
-  VOCAB = [...base, ...(S.custom || []).filter(c => !keys.has(c.w.toLowerCase()))];
+  const pw = packWords();
+  VOCAB = [...base, ...(S.custom || []).filter(c => !keys.has(c.w.toLowerCase()))].map(v => {
+    const e = pw[v.w.toLowerCase()];
+    return e ? {...v, exs: e.ex, cols: e.col, confs: e.conf, audio: e.audio} : v;
+  });
   const byTopic = {}, order = [];
   VOCAB.forEach(v => {
     const t = v.topic || 'Từ mẫu';
@@ -467,7 +570,8 @@ function orderSets(qs){ return shuffle(groupSets(qs)).flat(); }
 function poolFor(n){
   const label = 'Part ' + n;
   const local = n === 5 ? GRAMMAR : n <= 4 ? LISTEN_QS.filter(q => q.part === label) : READING_QS.filter(q => q.part === label);
-  return [...local, ...DB_QS.filter(q => q.partNo === n)].map(q => normQ({...q, partNo: n}));
+  const pk = packQs().filter(q => q.partNo === n).map(q => ({...q, audio: q.audio || transcriptToAudio(n, q.ts)}));
+  return [...local, ...DB_QS.filter(q => q.partNo === n), ...pk].map(q => normQ({...q, partNo: n}));
 }
 
 /* Logic ôn tập: câu chưa làm và câu hay sai lên trước; câu đã đúng liên tiếp xuống cuối */
@@ -526,7 +630,7 @@ function practiceWrong(){
 const KEY = 'toeic850-data';
 const DEFAULT = {target:850, quiz:{correct:0,total:0}, reading:{correct:0,total:0}, lq:{correct:0,total:0},
                  listen:{done:0,score:0}, vocab:{}, custom:[], settings:{accent:'US', lock:true, realListen:true}, daily:{d:'', n:0}, streak:{last:'', count:0},
-                 history:[], mocks:[], qstats:{}};
+                 history:[], mocks:[], qstats:{}, pack:null};
 const clone = o => JSON.parse(JSON.stringify(o));
 /* Chỉ giữ lại dữ liệu đúng kiểu, vì dữ liệu localStorage hoặc file nhập vào không đáng tin tuyệt đối */
 function sanitize(raw){
@@ -570,6 +674,13 @@ function sanitize(raw){
       .map(([k, v]) => [k, {seen: num(v.seen), wrong: num(v.wrong), streak: num(v.streak), p: num(v.p),
                             box: Math.min(5, num(v.box)), due: (Number.isFinite(v.due) && v.due >= 0 && v.due < 4e12) ? v.due : 0,
                             t: typeof v.t === 'string' ? v.t.slice(0, 30) : ''}]));
+  if (raw.pack && typeof raw.pack === 'object' && !Array.isArray(raw.pack)) {
+    const isObj = v => v && typeof v === 'object' && !Array.isArray(v);
+    const words = isObj(raw.pack.words) ? Object.entries(raw.pack.words).filter(([, e]) => isObj(e)).map(([w, e]) => ({w, ...e})) : [];
+    const qs = Array.isArray(raw.pack.qs) ? raw.pack.qs.filter(isObj).map(q => ({...q, part: q.partNo, verified: q.ver, setId: q.setId ? String(q.setId).replace(/^K-/, '') : undefined})) : [];
+    const p = validatePack({version: 1, name: raw.pack.name, words, qs}).pack;
+    out.pack = (Object.keys(p.words).length || p.qs.length) ? p : null;
+  }
   return out;
 }
 function load(){ try { return sanitize(JSON.parse(localStorage.getItem(KEY))); } catch(e) { return clone(DEFAULT); } }
@@ -722,9 +833,7 @@ function vocabView(){
         </div>
         <div id="back" hidden>
           <div style="font-size:20px;margin-top:10px">${esc(vcur.m)}</div>
-          <div class="exp">${vcur.ex ? esc(vcur.ex) : '<span class="muted">Chưa có câu ví dụ cho từ này.</span>'}</div>
-          ${vcur.col ? `<div class="muted">Cụm từ đi kèm: ${esc(vcur.col)}</div>` : ''}
-          ${vcur.conf ? `<div class="muted">Dễ nhầm với: ${esc(vcur.conf)}</div>` : ''}
+          ${wordExtraHTML(vcur)}
         </div>
       </div>
       <div style="margin-top:14px;text-align:center">
@@ -736,6 +845,19 @@ function vocabView(){
         </span>
       </div>
     </div>`;
+}
+function wordExtraHTML(v){
+  const ex = (v.exs && v.exs.length)
+    ? v.exs.map(x => `<div class="exp">${esc(x.t)} <span class="muted">· ${esc(x.src)}</span></div>`).join('')
+    : `<div class="exp">${v.ex ? esc(v.ex) : '<span class="muted">Chưa có câu ví dụ cho từ này.</span>'}</div>`;
+  const col = (v.cols && v.cols.length)
+    ? `<div class="muted">Cụm từ đi kèm: ${v.cols.map(c => esc(c.t) + (c.m ? ' (' + esc(c.m) + ')' : '')).join(' · ')}</div>`
+    : (v.col ? `<div class="muted">Cụm từ đi kèm: ${esc(v.col)}</div>` : '');
+  const conf = (v.confs && v.confs.length)
+    ? `<div class="muted">Dễ nhầm: ${v.confs.map(c => '<b>' + esc(c.w) + '</b> – ' + esc(c.note)).join('; ')}</div>`
+    : (v.conf ? `<div class="muted">Dễ nhầm với: ${esc(v.conf)}</div>` : '');
+  const au = v.audio ? `<div style="margin-top:6px"><button class="btn alt" onclick="event.stopPropagation();playFile(vcur.audio, () => speakText(vcur.w, 1))">🎧 Giọng thật</button></div>` : '';
+  return ex + col + conf + au;
 }
 function flip(){
   const b = document.getElementById('back');
@@ -925,7 +1047,11 @@ function listenAudioFor(q){
   if (Q.strict && q.partNo === 2 && q.o.length) return [...q.audio, ...q.o.map((o, k) => ({t: 'ABCD'[k] + '. ' + o}))];
   return q.audio;
 }
-function playQ(){ const q = Q && Q.qs[Q.i]; const lines = q && listenAudioFor(q); if (lines) say(lines, 0.9); }
+function playQ(){
+  const q = Q && Q.qs[Q.i]; if (!q) return;
+  const speak = () => { const lines = listenAudioFor(q); if (lines) say(lines, 0.9); };
+  if (q.audioFile) playFile(q.audioFile, speak); else speak();
+}
 
 /* Đoạn văn: một đoạn hoặc nhiều đoạn có tiêu đề; câu đầu của bộ mở sẵn, các câu sau thu gọn */
 function passageHTML(ctx, open){
@@ -984,7 +1110,8 @@ function pick(k){
   if (!ok) btns[k].classList.add('wrong');
   btns.forEach(b => b.disabled = true);
   const ts = q.ts ? `<br><br><i>Nội dung bài nghe:</i> ${esc(q.ts)}` : '';
-  document.getElementById('exp').innerHTML = `<div class="exp"><b>${ok ? 'Chính xác!' : 'Chưa đúng.'}</b> ${esc(q.e)}${ts}</div>`;
+  const srcLine = q.src ? `<br><span class="muted">Nguồn: ${esc(q.src)}${q.ver ? '' : ' · chưa duyệt'}</span>` : '';
+  document.getElementById('exp').innerHTML = `<div class="exp"><b>${ok ? 'Chính xác!' : 'Chưa đúng.'}</b> ${esc(q.e)}${ts}${srcLine}</div>`;
   document.getElementById('nxt').innerHTML = `<button class="btn" onclick="nextQ()">${Q.i+1 < Q.qs.length ? 'Câu tiếp theo' : 'Xem kết quả'}</button>`;
 }
 
@@ -1265,7 +1392,117 @@ let vpart = 'p1';
 function setPart(id){ vpart = id; partsView(); }
 
 const SECTIONS = {home:homeView, vocab:vocabView, grammar:grammarQuiz, reading:readingQuiz,
-                  listen:listenView, dictation:dictView, mock:mockTest, fulltest:fullTestView, analysis:analysisView, parts:partsView, ai:chatView};
+                  listen:listenView, dictation:dictView, mock:mockTest, fulltest:fullTestView, analysis:analysisView, content:contentView, parts:partsView, ai:chatView};
+
+/* =========================================================
+   TRANG NỘI DUNG: nạp gói, độ phủ, lấy mẫu kiểm tra
+   ========================================================= */
+let CHECK_SAMPLE = null;
+function packCounts(){
+  const pw = packWords();
+  const total = VOCAB.length;
+  const withEx = VOCAB.filter(v => v.exs && v.exs.length).length;
+  const withTwo = VOCAB.filter(v => v.exs && v.exs.length >= 2).length;
+  const withCol = VOCAB.filter(v => v.cols && v.cols.length).length;
+  const withConf = VOCAB.filter(v => v.confs && v.confs.length).length;
+  const withAudio = VOCAB.filter(v => v.audio).length;
+  const known = new Set(VOCAB.map(v => v.w.toLowerCase()));
+  const unmatched = Object.keys(pw).filter(k => !known.has(k)).length;
+  return {total, withEx, withTwo, withCol, withConf, withAudio, unmatched};
+}
+function contentView(){
+  const c = packCounts();
+  const pct = n => c.total ? Math.round(100 * n / c.total) + '%' : '0%';
+  const rows = [1, 2, 3, 4, 5, 6, 7].map(n => {
+    const pool = poolFor(n), ver = pool.filter(q => q.ver).length, src = pool.filter(q => q.src).length;
+    const need = TEST_PLAN[n];
+    return `<tr><td>Part ${n}</td><td>${pool.length}</td><td>${need}</td><td>${src}</td><td>${ver}</td></tr>`;
+  }).join('');
+  const file = PACK_FILE ? `${esc(PACK_FILE.name || 'content/pack.json')}: ${Object.keys(PACK_FILE.words).length} từ, ${PACK_FILE.qs.length} câu` : 'Chưa có content/pack.json';
+  const mine = S.pack ? `${esc(S.pack.name || 'Gói đã nhập')}: ${Object.keys(S.pack.words).length} từ, ${S.pack.qs.length} câu` : 'Chưa nhập gói nào';
+  const errs = PACK_ERRORS.length ? `<div class="exp"><b>Lỗi lần nhập gần nhất (${PACK_ERRORS.length}):</b><br>${PACK_ERRORS.slice(0, 20).map(esc).join('<br>')}${PACK_ERRORS.length > 20 ? '<br>…' : ''}</div>` : '';
+  const sample = CHECK_SAMPLE ? `<div class="exp"><b>Mẫu kiểm tra ngẫu nhiên (${CHECK_SAMPLE.length} mục)</b> – đối chiếu từng mục với nguồn ghi kèm:<br>${CHECK_SAMPLE.map(x => `• ${esc(x.text)} <span class="muted">[${esc(x.src)}]</span>`).join('<br>')}</div>` : '';
+  app.innerHTML = `
+    <div class="card">
+      <h2 style="margin-top:0">Nội dung và nguồn</h2>
+      <p class="muted">Mọi câu ví dụ, cụm từ, từ dễ nhầm và câu hỏi thêm vào đều phải ghi nguồn. Mục không có nguồn bị từ chối khi nhập.</p>
+      <p>Gói dùng chung: ${file}<br>Gói của bạn: ${mine}</p>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin:8px 0">
+        <label class="btn">Nhập gói nội dung (.json)<input type="file" accept="application/json" hidden onchange="importPack(this.files[0])"></label>
+        <button class="btn alt" onclick="downloadTemplate()">Tải file mẫu</button>
+        <button class="btn alt" onclick="sampleCheck()">Lấy mẫu kiểm tra 10%</button>
+        <button class="btn alt" onclick="clearPack()">Xóa gói đã nhập</button>
+      </div>
+      ${errs}${sample}
+      <h3>Từ vựng (${c.total} từ)</h3>
+      <p>Có câu ví dụ có nguồn: ${c.withEx} (${pct(c.withEx)}) · đủ 2 câu: ${c.withTwo} (${pct(c.withTwo)})<br>
+         Có cụm từ đi kèm: ${c.withCol} (${pct(c.withCol)}) · có từ dễ nhầm: ${c.withConf} (${pct(c.withConf)}) · có giọng thật: ${c.withAudio} (${pct(c.withAudio)})
+         ${c.unmatched ? `<br><span class="muted">${c.unmatched} từ trong gói chưa có trong kho từ vựng.</span>` : ''}</p>
+      <h3>Câu hỏi</h3>
+      <table style="width:100%;border-collapse:collapse"><tr><th align="left">Phần</th><th align="left">Hiện có</th><th align="left">Cần cho 1 đề</th><th align="left">Có nguồn</th><th align="left">Đã duyệt</th></tr>${rows}</table>
+    </div>`;
+}
+function importPack(f){
+  if (!f) return;
+  if (f.size > 2 * 1024 * 1024) { alert('File quá lớn (tối đa 2 MB).'); return; }
+  const r = new FileReader();
+  r.onload = () => {
+    let raw;
+    try { raw = JSON.parse(r.result); } catch(e) { alert('File không phải JSON hợp lệ.'); return; }
+    const res = validatePack(raw);
+    PACK_ERRORS = res.errors;
+    const n = Object.keys(res.pack.words).length + res.pack.qs.length;
+    if (!n) { contentView(); alert('Không có mục hợp lệ nào để nhập. Xem danh sách lỗi.'); return; }
+    S.pack = res.pack; save(); buildVocab(); CHECK_SAMPLE = null; contentView();
+  };
+  r.readAsText(f);
+}
+function clearPack(){
+  if (!S.pack) return;
+  if (!confirm('Xóa gói nội dung đã nhập? Tiến độ học vẫn được giữ.')) return;
+  S.pack = null; PACK_ERRORS = []; save(); buildVocab(); contentView();
+}
+function sampleCheck(){
+  const items = [];
+  const add = (text, src) => items.push({text, src});
+  const pools = [PACK_FILE, S.pack].filter(Boolean);
+  pools.forEach(p => {
+    Object.entries(p.words).forEach(([w, e]) => {
+      e.ex.forEach(x => add(w + ': ' + x.t, x.src));
+      e.col.forEach(x => add(w + ' – cụm: ' + x.t, x.src));
+      e.conf.forEach(x => add(w + ' – dễ nhầm ' + x.w + ': ' + x.note, x.src));
+    });
+    p.qs.filter(q => !q.ver).forEach(q => add('Part ' + q.partNo + ': ' + (q.q || q.ts).slice(0, 120), q.src));
+  });
+  if (!items.length) { alert('Chưa có nội dung để lấy mẫu.'); return; }
+  CHECK_SAMPLE = shuffle(items).slice(0, Math.max(5, Math.ceil(items.length * 0.1)));
+  contentView();
+}
+const PACK_TEMPLATE = {
+  _template: true, version: 1, name: 'Tên gói (ví dụ: Lô 1 – 50 từ công việc chung)',
+  words: [{w: 'invoice',
+    ex: [{t: 'Please attach the invoice to your expense report.', src: 'Ghi rõ sách/trang/URL và giấy phép'}],
+    col: [{t: 'issue an invoice', m: 'xuất hóa đơn', src: 'Ghi nguồn'}],
+    conf: [{w: 'receipt', note: 'receipt là biên lai sau khi trả tiền; invoice là hóa đơn yêu cầu thanh toán', src: 'Ghi nguồn'}],
+    audio: 'audio/words/invoice.mp3'}],
+  qs: [{part: 5, q: 'The manager asked all staff to ___ their reports by Friday.', o: ['submit', 'submits', 'submitted', 'submitting'], a: 0,
+        e: 'Sau "to" dùng động từ nguyên mẫu.', src: 'Ghi nguồn câu hỏi', verified: false, qtype: 'ngữ pháp', level: 2}]
+};
+function downloadTemplate(){
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(PACK_TEMPLATE, null, 2)], {type: 'application/json'}));
+  a.download = 'toeic850-pack-mau.json'; a.click();
+}
+async function loadPack(){
+  try {
+    const res = await fetch('content/pack.json', {cache: 'no-store'});
+    if (!res.ok) return;
+    const r = validatePack(await res.json());
+    PACK_FILE = r.pack; if (!PACK_FILE.name) PACK_FILE.name = 'content/pack.json';
+    buildVocab();
+    if (currentRoute === 'content') contentView();
+  } catch(e) { /* không có gói dùng chung: bỏ qua */ }
+}
 
 /* =========================================================
    HỎI AI: gọi trực tiếp Claude API bằng API key của người dùng
@@ -1360,7 +1597,7 @@ async function sendChat(){
   if (document.getElementById('chatlog')) chatView();
 }
 const LABELS = {home:'Trang chủ', vocab:'Từ vựng', grammar:'Part 5', reading:'Part 6-7',
-                listen:'Part 1-4', dictation:'Chép chính tả', mock:'Thi thử', fulltest:'Thi đầy đủ', analysis:'Phân tích', parts:'Hướng dẫn Part', ai:'Hỏi AI'};
+                listen:'Part 1-4', dictation:'Chép chính tả', mock:'Thi thử', fulltest:'Thi đầy đủ', analysis:'Phân tích', content:'Nội dung', parts:'Hướng dẫn Part', ai:'Hỏi AI'};
 function route(id){
   currentRoute = id;
   stopTimer(); Q = null;
@@ -1378,7 +1615,7 @@ let LANG = localStorage.getItem('toeic850-lang') || 'vi';
 let currentRoute = 'home';
 const UI_EN = {
   'Trang chủ':'Home', 'Từ vựng':'Vocabulary', 'Part 5':'Part 5', 'Part 6-7':'Part 6-7', 'Part 1-4':'Part 1-4',
-  'Chép chính tả':'Dictation', 'Thi thử':'Mock test', 'Hướng dẫn Part':'Part guide', 'Hỏi AI':'Ask AI',
+  'Chép chính tả':'Dictation', 'Nội dung':'Content', 'Thi thử':'Mock test', 'Hướng dẫn Part':'Part guide', 'Hỏi AI':'Ask AI',
   'Các con số dưới đây là kết quả luyện tập cá nhân, không phải điểm thi chính thức.':'These numbers are your personal practice results, not official scores.',
   'Từ vựng đã thuộc':'Words mastered', 'Tiến độ từ vựng':'Vocabulary progress',
   'Gợi ý học mỗi ngày (khoảng 60 phút)':'Daily plan (about 60 minutes)',
@@ -1490,6 +1727,7 @@ function toggleLang(){
 applyLangUI();
 langObserver.observe(document.body, {childList:true, subtree:true, characterData:true});
 loadQuestions();
+loadPack();
 route('home');
 </script>
 </body>
